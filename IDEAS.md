@@ -10,7 +10,9 @@ Suggestions for Claude Code mods (plugins in `~/.claude/mods/`). ✅ = built.
 - ✅ **rate-limits**: 5-hour and weekly usage gauges under the context bar, warning at 90%.
 - ✅ **voice**: Claude speaks through murmur: turn summaries, needs-you, background tasks, check-ins, rate-limit warnings, /read, /tldr-aloud, /hush; quiet unless you're away; a voice per session.
 - ✅ **tldr**: a one-line Haiku TL;DR under long replies; voice speaks the same line.
-- ✅ **ghostty**: tab title summary; tab progress bar; ❓ and a notification when Claude waits on you; background tint by permission mode; `/goto` between Claude sessions.
+- ✅ **ghostty**: tab title summary; tab progress bar; ❓ and a notification when Claude waits on you; background tint by permission mode; `/goto` (⌘⌃G), waiting sessions first; `/workspace` save, list and reopen; `/keybind`.
+- ✅ **previews**: hover the 🖼 line under an image Claude read to see it inline.
+- ✅ **paths**: file paths in Claude's replies become links that open the file.
 
 ## Staying in flow
 
@@ -58,13 +60,8 @@ Suggestions for Claude Code mods (plugins in `~/.claude/mods/`). ✅ = built.
 - **📥 `/grab`**: pull the neighbouring split's screen or scrollback (a failing server, a stack trace) into the prompt.
 - **🎯 Ask about this**: select text in any Ghostty pane, press a key, and it lands in Claude's prompt as a quote.
 - **▶️ Run in split**: a button on Claude's shell code blocks that runs them in a split you can watch, instead of through Claude.
-- **🗂️ Workspaces**: `/workspace save` remembers your Ghostty tabs of Claude sessions (folder and resume ID); `/workspace open` brings them all back.
 - **🍴 `/fork-tab`**: open a new tab continuing this conversation as a fork, to try an alternative side by side.
 - **🚀 `/spawn <task>`**: open a new tab with a fresh Claude session on a task, titled after it, for parallel work.
-- **🧭 Waiting first in /goto**: sessions waiting on you (❓) at the top of the picker, with how long they've waited.
-- **⌨️ Keybind installer**: add Ghostty keybinds that type into Claude (⌘. for /hush, ⌘G for /goto).
-- **🖼️ Image previews**: screenshots and images Claude reads or makes, shown inline through Ghostty's image support.
-- **🔗 Clickable paths**: `file.ts:42` in Claude's replies becomes a link that opens your editor at that line.
 - **🖌️ Cursor state**: the cursor's color shows busy or idle, the subtlest status indicator there is.
 - **🎤 Presentation mode**: `/present` bumps the font and hides the bars for screen sharing and pairing; again to undo.
 - **🌗 Theme sync**: the mods' colors follow your Ghostty theme, light or dark.

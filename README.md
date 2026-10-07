@@ -7,8 +7,10 @@ events and drawing.
 | Mod | What it does |
 |---|---|
 | [context-bar](context-bar) | Context window as a stacked bar above the prompt; hover swaps the row to the legend. `/context-bar` toggles it. |
+| [previews](previews) | Images Claude reads get a 🖼 line in the transcript; hover it to see the picture inline (Ghostty and other terminals with image support). |
 | [rate-limits](rate-limits) | 5-hour and weekly usage gauges under the context bar; a warning at 90%. |
-| [ghostty](ghostty) | Ghostty integration: a 3-word summary as the tab title; a tab progress bar (red after a failed tool call); ❓ plus a notification when Claude waits on you (no notification when **voice** says it out loud); a background tint for the permission mode (plan blue, accept edits amber, bypass red); `/goto` to jump between Claude sessions. Settings: search "Ghostty" in `/config`. |
+| [ghostty](ghostty) | Ghostty integration: a 3-word summary as the tab title; a tab progress bar (red after a failed tool call); ❓ plus a notification when Claude waits on you (no notification when **voice** says it out loud); a background tint for the permission mode; `/goto` (⌘⌃G) between Claude sessions, waiting ones first, `/goto next` to the longest wait; `/workspace` to save a window of sessions (named by Haiku) and reopen it, each conversation resumed; `/keybind` for your own Ghostty keys that type into Claude. Settings: search "Ghostty" in `/config`. |
+| [paths](paths) | File paths in Claude's replies (`src/app.ts:42`) become links: ⌘-click opens the file, or your editor at the line. |
 | [session-id](session-id) | Session ID in the footer: click copies it, ctrl-click copies `claude --resume <id>`. |
 | [tldr](tldr) | A one-line TL;DR under Claude's long replies, written by Claude Haiku. **voice** speaks this same line instead of writing its own. |
 | [turn-receipt](turn-receipt) | Adds tools, edited files, tokens and cost to each turn's "Baked for…" line. |

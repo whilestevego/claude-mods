@@ -20,7 +20,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
     }
     if (script.includes('ps -ax')) return out('/dev/ttys000\n/dev/ttys004\n')
     if (script.includes('+show-config')) return out(script.includes('--default') ? 'background = #282c34\n' : '')
-    return out(script.includes('ps -o tty') ? '/dev/ttys004\n/home/me\n' : '')
+    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '')
   })
   on('config.list', () => ({ value: opts.voiceNeedsYou ? [{ key: 'voice.needsYou', value: true }] : [] }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'Tab Progress Bar', usage: {} } }) as never)
@@ -154,7 +154,7 @@ test('/goto reports a failing query instead of claiming there are no sessions', 
   on('process.run', (_$, e) => {
     const script = (e.argv as string[])[2] ?? ''
     if (script.includes('ps -ax')) return { value: { exitCode: 2, stdout: '', stderr: 'awk: syntax error' } } as never
-    return { value: { exitCode: 0, stdout: script.includes('ps -o tty') ? '/dev/ttys004\n/home/me\n' : '', stderr: '' } } as never
+    return { value: { exitCode: 0, stdout: script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '', stderr: '' } } as never
   })
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', () => ({ text: '' }))
@@ -162,4 +162,43 @@ test('/goto reports a failing query instead of claiming there are no sessions', 
   await $.session.start(start)
   const r = await $.command.run({ command: 'goto', args: '' } as never)
   expect(r.text).toBe("/goto couldn't list sessions: ps query failed: awk: syntax error")
+})
+
+test('/keybind adds, refuses what Ghostty rejects, and removes', { options: { keybinds: false } }, async ($, on) => {
+  const files: Record<string, string> = { '/home/me/Library/Application Support/com.mitchellh.ghostty/config': 'font-size = 13\n' }
+  let valid = true
+  on('process.run', (_$, e) => {
+    const argv = e.argv as string[]
+    const script = argv[2] ?? ''
+    const out = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '' } }) as never
+    if (script.includes('validate-config')) return out(valid ? '' : 'claude-keybinds:4:keybind: error.InvalidAction', valid ? 0 : 1)
+    if (script.includes('[ -f')) return out('/home/me/Library/Application Support/com.mitchellh.ghostty\n')
+    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '')
+  })
+  on('fs.read', (_$, e) => {
+    const path = (e as unknown as { path: string }).path
+    return (path in files ? { value: files[path] } : { deny: 'missing' }) as never
+  })
+  on('fs.write', (_$, e) => {
+    const { path, text } = e as unknown as { path: string; text: string }
+    files[path] = text
+    return { value: undefined } as never
+  })
+  on('command.register', () => ({ value: {} }) as never)
+  on('command.run', () => ({ text: '' }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start(start)
+  const run = async (args: string) => (await $.command.run({ command: 'keybind', args } as never)).text
+  const dir = '/home/me/Library/Application Support/com.mitchellh.ghostty'
+
+  expect(await run('add super+ctrl+h /hush')).toBe('⌘⌃H now types /hush ⏎')
+  expect(files[`${dir}/claude-keybinds`]).toContain('keybind = super+ctrl+h=text:/hush\\r')
+  expect(files[`${dir}/config`]).toContain('config-file = ?claude-keybinds')
+  valid = false
+  expect(await run('add super+ctrl+j /read')).toContain("Ghostty didn't accept that")
+  expect(files[`${dir}/claude-keybinds`]).not.toContain('super+ctrl+j')  // rolled back
+  valid = true
+  expect(await run('')).toContain('⌘⌃H')
+  expect(await run('remove super+ctrl+h')).toBe('Removed ⌘⌃H.')
+  expect(files[`${dir}/claude-keybinds`]).not.toContain('super+ctrl+h')
 })
