@@ -1,0 +1,54 @@
+{
+  "name": "ghostty",
+  "version": "0.1.0",
+  "description": "Ghostty integration: a 3-word summary as the tab title, a tab progress bar, ❓ and a notification when Claude waits on you, a background tint for the permission mode, and /goto to jump between Claude sessions",
+  "userConfig": {
+    "tabTitle": {
+      "type": "boolean",
+      "title": "Ghostty: smart tab title",
+      "description": "Set the tab title to a 3-word summary of the session (a tiny Claude Haiku call)",
+      "default": true
+    },
+    "titleMinutes": {
+      "type": "number",
+      "title": "Ghostty: retitle every (minutes)",
+      "description": "How often the tab title can follow the session's topic",
+      "default": 3
+    },
+    "tabProgress": {
+      "type": "boolean",
+      "title": "Ghostty: tab progress bar",
+      "description": "Show a progress bar on the tab while Claude works; red after a failed tool call",
+      "default": true
+    },
+    "waitingBadge": {
+      "type": "boolean",
+      "title": "Ghostty: ❓ when Claude waits on you",
+      "description": "Put ❓ in the tab title while Claude waits for a permission or an answer",
+      "default": true
+    },
+    "waitingNotification": {
+      "type": "string",
+      "title": "Ghostty: notify when Claude waits on you",
+      "description": "auto: a desktop notification, unless the voice mod already says it out loud. always or never",
+      "options": [
+        "auto",
+        "always",
+        "never"
+      ],
+      "default": "auto"
+    },
+    "modeTint": {
+      "type": "boolean",
+      "title": "Ghostty: tint the background by permission mode",
+      "description": "Plan blue, accept edits amber, auto purple, don't ask teal, bypass permissions red; default mode keeps your background",
+      "default": true
+    },
+    "tintStrength": {
+      "type": "number",
+      "title": "Ghostty: tint strength (%)",
+      "description": "How far the background moves toward the mode's color",
+      "default": 10
+    }
+  }
+}
