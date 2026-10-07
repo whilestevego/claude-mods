@@ -1,6 +1,5 @@
 // Workspaces: a Ghostty window's tabs of Claude sessions and shells, saved and reopened.
 
-import type { Entry } from './registry'
 import { safe } from './term'
 
 /** A Claude tab resumes its conversation (or the folder's latest, without a known ID); a shell just opens there. */
@@ -11,20 +10,73 @@ export type Workspace = { name: string; savedAt: number; tabs: Pane[][] }
 
 /**
  * The window's terminals ("tab index<TAB>tty<TAB>folder<TAB>title" lines, in order) as tabs of panes.
- * A pane is Claude when Claude runs on its tty; its conversation comes from that session's status file.
+ * A pane is Claude when Claude runs on its tty (`claudePids`: tty → Claude's process ID); its conversation
+ * is the one Claude Code records for that process (`conversations`: pid → session ID).
  */
-export function fromWindow(lines: string, claudeTtys: ReadonlySet<string>, entries: ReadonlyMap<string, Entry>): Pane[][] {
+export function fromWindow(
+  lines: string,
+  claudePids: ReadonlyMap<string, string>,
+  conversations: ReadonlyMap<string, string>,
+): Pane[][] {
   const tabs = new Map<string, Pane[]>()
   for (const line of lines.split('\n')) {
     const [tab, tty, cwd, title] = line.split('\t')
     if (!tab || !tty || cwd === undefined) continue
     const name = safe(title ?? '')
-    const pane: Pane = claudeTtys.has(tty)
-      ? { kind: 'claude', cwd, title: name, sessionId: entries.get(tty)?.sessionId }
+    const pid = claudePids.get(tty)
+    const pane: Pane = pid
+      ? { kind: 'claude', cwd, title: name, sessionId: conversations.get(pid) }
       : { kind: 'shell', cwd, title: name }
     tabs.set(tab, [...(tabs.get(tab) ?? []), pane])
   }
   return [...tabs.values()]
+}
+
+/** `ps` lines ("/dev/ttys004 36583") → tty → Claude's process ID. */
+export function claudePidsFrom(ps: string): Map<string, string> {
+  return new Map(ps.split('\n').map(l => l.trim().split(/\s+/)).filter(f => f.length === 2).map(([tty, pid]) => [tty!, pid!]))
+}
+
+/** Claude Code's own record of a running session (~/.claude/sessions/<pid>.json) → its conversation ID. */
+export function conversationOf(record: string): string | undefined {
+  try {
+    const id = (JSON.parse(record) as { sessionId?: unknown }).sessionId
+    return typeof id === 'string' ? id : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The conversations a workspace resumes. */
+export function conversationsIn(ws: Pick<Workspace, 'tabs'>): Set<string> {
+  return new Set(ws.tabs.flat().flatMap(p => (p.kind === 'claude' && p.sessionId ? [p.sessionId] : [])))
+}
+
+/**
+ * The saved workspace this window is (at least half the same conversations), so saving it again,
+ * or closing it, updates that one instead of making a near-duplicate under a new name.
+ */
+export function sameWorkspace<T extends Pick<Workspace, 'tabs'>>(tabs: Pane[][], saved: readonly T[]): T | undefined {
+  const mine = conversationsIn({ tabs })
+  if (mine.size === 0) return undefined
+  let best: T | undefined
+  let bestShare = 0.5
+  for (const ws of saved) {
+    const theirs = conversationsIn(ws)
+    const shared = [...mine].filter(id => theirs.has(id)).length
+    const share = shared / Math.max(mine.size, theirs.size)
+    if (share >= bestShare) [best, bestShare] = [ws, share]
+  }
+  return best
+}
+
+/** The terminals `/workspace close` exits and closes: every Claude pane but this session's own. */
+export function closable(lines: string, claudePids: ReadonlyMap<string, string>, myTty: string): Array<{ id: string; tty: string; pid: string }> {
+  return lines
+    .split('\n')
+    .map(l => l.split('\t'))
+    .filter(f => f.length >= 5 && f[1] !== myTty && claudePids.has(f[1]!))
+    .map(f => ({ id: f[4]!, tty: f[1]!, pid: claudePids.get(f[1]!)! }))
 }
 
 /** "Brilliant Admin Work" → "brilliant-admin-work": the file name. */
@@ -51,10 +103,10 @@ export function cleanName(reply: string): string {
 /** An AppleScript string literal. */
 const str = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
-/** The command a pane starts with: resume its conversation, or the folder's most recent one. */
+/** The command a pane starts with: resume its conversation, or a new session when it isn't known. */
 export function startCommand(p: Pane): string | undefined {
   if (p.kind === 'shell') return undefined
-  return p.sessionId && /^[0-9a-f-]{8,64}$/i.test(p.sessionId) ? `claude --resume ${p.sessionId}` : 'claude --continue'
+  return p.sessionId && /^[0-9a-f-]{8,64}$/i.test(p.sessionId) ? `claude --resume ${p.sessionId}` : 'claude'
 }
 
 /**

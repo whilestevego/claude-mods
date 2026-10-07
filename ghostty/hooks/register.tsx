@@ -13,7 +13,10 @@ import type { Binding } from './keybinds'
 import { badge, nextWaiting, parseEntry, rank } from './registry'
 import type { Entry, Ranked, Status } from './registry'
 import { ask, clean } from './title'
-import { cleanName, fromWindow, namePrompt, openScript, parseWorkspace, slug, summary as describe } from './workspace'
+import {
+  claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, parseWorkspace, sameWorkspace, slug,
+  summary as describe,
+} from './workspace'
 import type { Workspace } from './workspace'
 
 type Config = {
@@ -202,7 +205,7 @@ async function rankedSessions($: EngineInterface): Promise<Ranked[]> {
 
 const workspaceDir = () => `${home}/.claude/workspaces`
 
-// The window holding this session, as "tab index<TAB>tty<TAB>folder<TAB>title" lines in order.
+// The window holding this session, as "tab index<TAB>tty<TAB>folder<TAB>title<TAB>terminal id" lines in order.
 const LIST_WINDOW = `on run argv
   set myTty to item 1 of argv
   set sep to character id 9
@@ -216,7 +219,7 @@ const LIST_WINDOW = `on run argv
         set out to ""
         repeat with tb in tabs of w
           repeat with t in terminals of tb
-            set out to out & (index of tb) & sep & (tty of t) & sep & (working directory of t) & sep & (name of t) & linefeed
+            set out to out & (index of tb) & sep & (tty of t) & sep & (working directory of t) & sep & (name of t) & sep & (id of t) & linefeed
           end repeat
         end repeat
         return out
@@ -226,16 +229,40 @@ const LIST_WINDOW = `on run argv
   return ""
 end run`
 
-async function saveWorkspace($: EngineInterface, given: string): Promise<string> {
-  const [window, ttys, entries] = await Promise.all([
-    $.process.run(['osascript', '-e', LIST_WINDOW, tty]),
-    $.process.run(['sh', '-c', CLAUDE_TTYS]),
-    readEntries($),
-  ])
-  if (window.exitCode !== 0) return `Couldn't read this Ghostty window: ${window.stderr.trim().slice(0, 160)}`
-  const tabs = fromWindow(window.stdout, new Set(ttys.stdout.split('\n').filter(Boolean)), entries)
-  if (tabs.length === 0) return "Couldn't find this session's Ghostty window."
-  let name = given.trim()
+// Every Claude process with its tty: "/dev/ttys004 36583" lines.
+const CLAUDE_PIDS = `ps -ax -o tty=,pid=,comm= | awk 'match($3, "(^|[/])claude$") { print "/dev/" $1, $2 }'`
+
+/** Claude Code's records of running sessions: process ID → conversation ID. */
+async function conversations($: EngineInterface, pids: Iterable<string>): Promise<Map<string, string>> {
+  const pairs = await Promise.all(
+    [...pids].map(async pid => [pid, conversationOf(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))] as const),
+  )
+  return new Map(pairs.filter((p): p is readonly [string, string] => p[1] !== undefined))
+}
+
+type Saved = { text: string; window?: string; claudePids?: Map<string, string> }
+
+/** Every saved workspace, read in full. */
+async function savedWorkspaces($: EngineInterface): Promise<Array<Workspace & { file: string }>> {
+  const files = await $.fs.list(workspaceDir()).catch(() => [])
+  const all = await Promise.all(
+    files.filter(f => f.name.endsWith('.json')).map(async f => {
+      const file = `${workspaceDir()}/${f.name}`
+      const ws = parseWorkspace(await $.fs.read(file).catch(() => ''))
+      return ws ? { ...ws, file } : undefined
+    }),
+  )
+  return all.filter(w => w !== undefined)
+}
+
+async function saveWorkspace($: EngineInterface, given: string): Promise<Saved> {
+  const [window, ps] = await Promise.all([$.process.run(['osascript', '-e', LIST_WINDOW, tty]), $.process.run(['sh', '-c', CLAUDE_PIDS])])
+  if (window.exitCode !== 0) return { text: `Couldn't read this Ghostty window: ${window.stderr.trim().slice(0, 160)}` }
+  const claudePids = claudePidsFrom(ps.stdout)
+  const tabs = fromWindow(window.stdout, claudePids, await conversations($, claudePids.values()))
+  if (tabs.length === 0) return { text: "Couldn't find this session's Ghostty window." }
+  // No name: the saved workspace this window was opened from keeps its name, else Haiku names it.
+  let name = given.trim() || sameWorkspace(tabs, await savedWorkspaces($))?.name || ''
   if (!name) {
     const r = await $.model.complete({ model: 'haiku', prompt: namePrompt(tabs), maxTokens: 20, timeoutMs: 8000 })
     name = (r.isAnswered && cleanName(r.text)) || `Workspace ${new Date().toISOString().slice(0, 10)}`
@@ -245,21 +272,53 @@ async function saveWorkspace($: EngineInterface, given: string): Promise<string>
   const file = `${workspaceDir()}/${slug(name)}.json`
   const existed = await $.fs.stat(file).then(() => true, () => false)
   await $.fs.write(file, JSON.stringify(ws, null, 2))
-  const unknown = tabs.flat().filter(p => p.kind === 'claude' && !p.sessionId).length
-  return `${existed ? 'Updated' : 'Saved'} workspace "${name}": ${describe(ws)}.` +
-    (unknown ? ` ${unknown} Claude tab${unknown === 1 ? '' : 's'} started before this mod will reopen the folder's latest conversation.` : '')
+  const unknown = tabs.flat().filter(p => p.kind === 'claude' && !p.sessionId)
+  const text = `${existed ? 'Updated' : 'Saved'} workspace "${name}": ${describe(ws)}.` +
+    (unknown.length ? ` Couldn't find the conversation for ${unknown.map(p => `"${p.title}"`).join(', ')}: ${unknown.length === 1 ? 'it' : 'they'} will reopen as a new session.` : '')
+  return { text, window: window.stdout, claudePids }
 }
 
-async function loadWorkspaces($: EngineInterface): Promise<WorkspaceRow[]> {
-  const files = await $.fs.list(workspaceDir()).catch(() => [])
-  const rows = await Promise.all(
-    files.filter(f => f.name.endsWith('.json')).map(async f => {
-      const file = `${workspaceDir()}/${f.name}`
-      const ws = parseWorkspace(await $.fs.read(file).catch(() => ''))
-      return ws ? { file, name: ws.name, summary: describe(ws), savedAt: ws.savedAt } : undefined
-    }),
+/**
+ * Saves the window, exits every other Claude session in it and closes their panes, then exits this
+ * session too, leaving its tab open at the shell. Shell panes stay open.
+ */
+async function closeWorkspace($: EngineInterface, given: string): Promise<string> {
+  const saved = await saveWorkspace($, given)
+  if (!saved.window || !saved.claudePids) return saved.text
+  const targets = closable(saved.window, saved.claudePids, tty)
+  if (targets.length === 0) return exitThisSession($, `${saved.text} Exiting this session.`)
+  // A polite exit, as quitting from outside does; Claude has written each conversation to disk as it went.
+  await $.process.run(['kill', '-TERM', ...targets.map(t => t.pid)])
+  let alive = targets
+  for (let waited = 0; alive.length && waited < 5000; waited += 250) {
+    await $.clock.sleep(250)
+    const r = await $.process.run(['sh', '-c', 'for p; do kill -0 "$p" 2>/dev/null && echo "$p"; done', 'sh', ...alive.map(t => t.pid)])
+    const running = new Set(r.stdout.split('\n').filter(Boolean))
+    alive = alive.filter(t => running.has(t.pid))
+  }
+  const exited = targets.filter(t => !alive.includes(t))
+  for (const t of exited) await $.process.run(['osascript', '-e', CLOSE_TERMINAL, t.id])
+  return exitThisSession(
+    $,
+    `${saved.text} Closed ${exited.length} other Claude session${exited.length === 1 ? '' : 's'}.` +
+      (alive.length ? ` ${alive.length} didn't exit within 5 seconds and ${alive.length === 1 ? 'is' : 'are'} still open.` : '') +
+      ' Exiting this session.',
   )
-  return rows.filter(r => r !== undefined).sort((a, b) => b.savedAt - a.savedAt)
+}
+
+/** Quits this session the way typing /exit does, just after `message` has printed: the tab stays, at the shell. */
+function exitThisSession($: EngineInterface, message: string): string {
+  $.clock.after(300, () => void $.command.run({ command: 'exit', args: '' }).catch(() => {}))
+  return message
+}
+
+const CLOSE_TERMINAL = `on run argv
+  tell application "Ghostty" to close (first terminal whose id is (item 1 of argv))
+end run`
+
+async function loadWorkspaces($: EngineInterface): Promise<WorkspaceRow[]> {
+  const all = await savedWorkspaces($)
+  return all.map(ws => ({ file: ws.file, name: ws.name, summary: describe(ws), savedAt: ws.savedAt })).sort((a, b) => b.savedAt - a.savedAt)
 }
 
 async function openWorkspace($: EngineInterface, file: string): Promise<string> {
@@ -326,7 +385,7 @@ export const register: Register = (on, options) => {
     // First start: install the default keys once (a later /keybind remove sticks, since the file then exists).
     if (cfg.keybinds && (await readBindings($).catch(() => null))?.text === null) void saveBindings($, DEFAULTS).catch(() => {})
     await $.command.register({ name: 'goto', description: 'Jump to another Claude session in Ghostty (waiting ones first): /goto, /goto next, or /goto <number or words>' })
-    await $.command.register({ name: 'workspace', description: 'Save this Ghostty window of sessions, or reopen one: /workspace save [name], /workspace list, /workspace open <name>' })
+    await $.command.register({ name: 'workspace', description: 'Save this Ghostty window of sessions, or reopen one: /workspace save [name], /workspace close [name] (save, then exit the other sessions), /workspace list, /workspace open <name>' })
     return next(e)
   })
 
@@ -380,13 +439,14 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'workspace' }, async ($, e) => {
     const [verb = 'list', ...rest] = e.args.trim().split(/\s+/).filter(Boolean)
     const arg = rest.join(' ')
-    if (verb === 'save') return { text: await saveWorkspace($, arg) }
+    if (verb === 'save') return { text: (await saveWorkspace($, arg)).text }
+    if (verb === 'close') return { text: await closeWorkspace($, arg) }
     const rows = await loadWorkspaces($)
     if (verb === 'open' && arg) {
       const hit = rows.find(r => r.name.toLowerCase() === arg.toLowerCase()) ?? rows.find(r => r.name.toLowerCase().includes(arg.toLowerCase()))
       return { text: hit ? await openWorkspace($, hit.file) : `No workspace called "${arg}". /workspace list shows them.` }
     }
-    if (verb !== 'list' && verb !== 'open') return { text: 'Usage: /workspace save [name], /workspace list, /workspace open <name>' }
+    if (verb !== 'list' && verb !== 'open') return { text: 'Usage: /workspace save [name], /workspace close [name], /workspace list, /workspace open <name>' }
     if (rows.length === 0) return { text: 'No saved workspaces yet. /workspace save remembers this window.' }
     await update($, workspaceRows, () => rows)
     await $.ui.open({ id: WORKSPACES, title: 'Workspaces', focus: true, closeOnEscape: true, rows: rows.length + 1 })

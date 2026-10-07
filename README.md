@@ -88,9 +88,12 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
   and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;
   `/goto <words>` jumps to the one whose title matches.
 - **`/workspace save [name]`** remembers this window's tabs, each Claude tab with its
-  conversation. Without a name, Haiku picks one. **`/workspace list`** shows saved
-  workspaces: pick one to reopen it (every conversation resumes where it left off), or
-  delete it. **`/workspace open <name>`** reopens one directly.
+  conversation. Without a name, it keeps the name of the workspace the window was opened
+  from, or Haiku picks one. **`/workspace close [name]`** does the same, then exits every
+  Claude session in the window and closes their tabs, except your current tab, which
+  stays open at the shell. Shell tabs stay open too. **`/workspace list`** shows saved workspaces: pick one to reopen it (every
+  conversation resumes where it left off), or delete it. **`/workspace open <name>`**
+  reopens one directly.
 - **`/keybind add <keys> <text>`** makes a Ghostty key type something into Claude, like
   `/keybind add super+ctrl+h /hush` for ⌘⌃H. `/keybind` lists them, and
   `/keybind remove <keys>` removes one.
