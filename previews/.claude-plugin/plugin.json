@@ -1,0 +1,9 @@
+{
+  "name": "previews",
+  "version": "0.1.0",
+  "description": "Images Claude reads get a 🖼 preview line in the transcript; hover it to see the picture inline (terminals with image support, like Ghostty)",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "rows": { "type": "number", "title": "Previews: height (rows)", "description": "How tall a preview is drawn", "default": 14 }
+  }
+}
