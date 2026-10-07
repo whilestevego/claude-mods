@@ -109,8 +109,23 @@ async function say($: EngineInterface, text: string, always = false) {
   if (r && r.exitCode !== 0) $.ui.toast(`murmur: ${r.stderr.trim().slice(0, 120) || 'failed'}`)
 }
 
-async function summarize($: EngineInterface, request: string, answer: string): Promise<string> {
+/** The tldr mod's line for this turn, when tldr is enabled: one summary, shown and spoken. Empty when it has none. */
+async function tldrLine($: EngineInterface, turnId: string): Promise<string> {
+  const rows = await $.config.list().catch(() => [])
+  if (!rows.some(r => r.key.startsWith('tldr.'))) return ''
+  // tldr publishes after its own Haiku call (8 s at most); a short reply publishes an empty line at once.
+  for (let waited = 0; waited <= 10_000; waited += 250) {
+    const held = (await $.state.get({ plugin: 'tldr', key: 'line' } as never)) as { value?: { turnId?: string; text?: string } | null }
+    if (held.value?.turnId === turnId) return held.value.text ?? ''
+    await $.clock.sleep(250)
+  }
+  return ''
+}
+
+async function summarize($: EngineInterface, turnId: string, request: string, answer: string): Promise<string> {
   if (cfg.summaryStyle === 'first-sentence') return firstSentence(answer)
+  const shared = await tldrLine($, turnId)
+  if (shared) return shared
   const r = await $.model.complete({ model: 'haiku', prompt: summaryPrompt(request, answer), maxTokens: 60 })
   const line = r.isAnswered ? prose(r.text).replace(/\s+/g, ' ').trim() : ''
   return line && line.length <= 200 ? line : firstSentence(answer)
@@ -178,7 +193,7 @@ export const register: Register = (on, options) => {
     const isLong = e.durationMs >= cfg.minTurnSeconds * 1000
     if (cfg.turnSummaries && e.reason === 'answer' && isLong && !muted) {
       const request = lastRequest
-      void summarize($, request, e.answer).then(line => say($, line))
+      void summarize($, e.turnId, request, e.answer).then(line => say($, line))
     }
     return next(e)
   })

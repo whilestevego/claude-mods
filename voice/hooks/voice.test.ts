@@ -159,3 +159,27 @@ test('long turns check in with the todo in progress', { options: { checkinMinute
   await settle()
   expect(spoken.at(-1)?.at(-1)).toMatch(/^Still working, \d+ minutes? in\. Writing the parser\. 1 of 2 steps done\.$/)
 })
+
+test('with the tldr mod on, voice speaks its line and makes no Haiku call of its own', async ($, on) => {
+  let haikuCalls = 0
+  on('config.list', () => ({ value: [{ key: 'tldr.minChars', value: 600 }] }) as never)
+  on('state.get', () => ({ value: { value: { turnId: 't', text: 'Built the tab progress bar.' }, version: 1 } }) as never)
+  on('model.complete', () => (haikuCalls++, { value: { isAnswered: true, text: 'Own line.', usage: {} } }) as never)
+  const spoken = machine(on, { tty: '' })
+  await $.session.start(start)
+  await $.turn.complete(turn(60_000, 'A long answer.'))
+  await settle()
+  expect(spoken.at(-1)?.at(-1)).toBe('Built the tab progress bar.')
+  expect(haikuCalls).toBe(0)
+})
+
+test('when tldr has no line for the turn (a short reply), voice writes its own', async ($, on) => {
+  on('config.list', () => ({ value: [{ key: 'tldr.minChars', value: 600 }] }) as never)
+  on('state.get', () => ({ value: { value: { turnId: 't', text: '' }, version: 1 } }) as never)
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'Own line.', usage: {} } }) as never)
+  const spoken = machine(on, { tty: '' })
+  await $.session.start(start)
+  await $.turn.complete(turn(60_000, 'Short.'))
+  await settle()
+  expect(spoken.at(-1)?.at(-1)).toBe('Own line.')
+})

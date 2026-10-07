@@ -8,8 +8,9 @@ events and drawing.
 |---|---|
 | [context-bar](context-bar) | Context window as a stacked bar above the prompt; hover swaps the row to the legend. `/context-bar` toggles it. |
 | [rate-limits](rate-limits) | 5-hour and weekly usage gauges under the context bar; a warning at 90%. |
+| [ghostty](ghostty) | Ghostty integration: a 3-word summary as the tab title; a tab progress bar (red after a failed tool call); ❓ plus a notification when Claude waits on you (no notification when **voice** says it out loud); a background tint for the permission mode (plan blue, accept edits amber, bypass red); `/goto` to jump between Claude sessions. Settings: search "Ghostty" in `/config`. |
 | [session-id](session-id) | Session ID in the footer: click copies it, ctrl-click copies `claude --resume <id>`. |
-| [tab-title](tab-title) | Sets the terminal tab title to a 3-word summary of the session (Claude Haiku), refreshed as it goes. |
+| [tldr](tldr) | A one-line TL;DR under Claude's long replies, written by Claude Haiku. **voice** speaks this same line instead of writing its own. |
 | [turn-receipt](turn-receipt) | Adds tools, edited files, tokens and cost to each turn's "Baked for…" line. |
 | [voice](voice) | Claude speaks through [murmur](https://github.com/whilestevego/murmur): turn summaries, needs-you alerts, background tasks, progress check-ins, rate-limit warnings, `/read`, `/tldr-aloud`, `/hush`. One voice per session. |
 
@@ -31,9 +32,9 @@ Settings live in `/config`, under each mod's name.
 
 ## Requirements
 
-- **tab-title** and **session-id**'s pointer hand are for Ghostty (also Kitty and foot for
-  the pointer). tab-title also needs `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` so Claude Code
-  doesn't set its own title.
+- **ghostty** is for Ghostty (1.2+ for the tab progress bar). Its tab title also needs
+  `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, so Claude Code doesn't set its own title.
+  **session-id**'s pointer hand works in Ghostty, Kitty and foot.
 - **voice** needs [murmur](https://github.com/whilestevego/murmur) on the `PATH`, so it
   needs Apple Silicon. Its "away" detection uses Ghostty's AppleScript support.
 
