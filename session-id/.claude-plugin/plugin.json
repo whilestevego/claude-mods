@@ -1,0 +1,1 @@
+{ "name": "session-id", "version": "0.1.0", "description": "Shows the session id in the prompt footer; click to copy", "types": "./types/index.d.ts" }

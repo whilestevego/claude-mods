@@ -1,0 +1,1 @@
+{ "name": "turn-receipt", "version": "0.1.0", "description": "A receipt row above the prompt after each turn: time, tools, files edited, cost", "types": "./types/index.d.ts" }
