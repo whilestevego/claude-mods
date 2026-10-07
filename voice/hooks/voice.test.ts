@@ -14,7 +14,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
     if (argv[0] === 'sh' && argv[2]?.includes('kill -0')) return out(argv.slice(4).filter(p => alive.includes(p)).join('\n'))
-    if (argv[0] === 'sh') return out('ttys004 4242\nghostty\n/home/me\n')
+    if (argv[0] === 'sh') return out('ghostty\n/home/me\nttys004 4242\n')
     if (argv[0] === 'osascript') return out(focused.tty)
     if (argv[0] === 'murmur') spoken.push(argv)
     return out('')

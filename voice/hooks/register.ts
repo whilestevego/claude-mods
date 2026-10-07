@@ -68,11 +68,12 @@ const FOCUSED_TTY = `tell application "Ghostty"
 end tell`
 
 async function locate($: EngineInterface) {
-  const found = (await $.process.run(['sh', '-c', `${FIND_CLAUDE}\necho "$TERM_PROGRAM"\necho "$HOME"`])).stdout.trim().split('\n')
-  const [tty, pid] = (found[0] ?? '').split(' ')
+  // The environment first: the Claude search exits as soon as it finds it.
+  const found = (await $.process.run(['sh', '-c', `echo "$TERM_PROGRAM"\necho "$HOME"\n${FIND_CLAUDE}`])).stdout.trim().split('\n')
+  inGhostty = (found[0] ?? '').toLowerCase() === 'ghostty'
+  home = found[1] ?? ''
+  const [tty, pid] = (found[2] ?? '').split(' ')
   claude = tty && pid ? { tty, pid } : null
-  inGhostty = (found[1] ?? '').toLowerCase() === 'ghostty'
-  home = found[2] ?? ''
 }
 
 // Every running session shares one small table of who speaks with which voice.
