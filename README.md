@@ -84,19 +84,35 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
   needs a permission or an answer. If voice is on, it speaks instead of notifying.
 - **Mode tint:** the background takes a faint tint in risky permission modes: blue for
   plan, amber for accept edits, red for bypass permissions.
+- **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
 - **`/goto`** (or ⌘⌃G) lists your open Claude sessions, the ones waiting on you first,
   and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;
   `/goto <words>` jumps to the one whose title matches.
-- **`/workspace save [name]`** remembers this window's tabs, each Claude tab with its
-  conversation. Without a name, it keeps the name of the workspace the window was opened
-  from, or Haiku picks one. **`/workspace close [name]`** does the same, then exits every
-  Claude session in the window and closes their tabs, except your current tab, which
-  stays open at the shell. Shell tabs stay open too. **`/workspace list`** shows saved workspaces: pick one to reopen it (every
-  conversation resumes where it left off), or delete it. **`/workspace open <name>`**
-  reopens one directly.
 - **`/keybind add <keys> <text>`** makes a Ghostty key type something into Claude, like
   `/keybind add super+ctrl+h /hush` for ⌘⌃H. `/keybind` lists them, and
   `/keybind remove <keys>` removes one.
+
+#### Workspaces
+
+A workspace is a Ghostty window of Claude sessions you can put away and bring back later.
+It remembers every tab and split: each Claude session with its conversation, and each shell
+with its folder. Reopening it brings back the whole window, with every conversation picking
+up where it left off.
+
+| Command | What it does |
+|---|---|
+| `/workspace save [name]` | Saves this window. With no name, it keeps the name the window already had, or Claude Haiku picks one from the tabs. |
+| `/workspace close [name]` | Saves this window, then exits every Claude session in it and closes their tabs. Your current tab stays open at the shell, and shell tabs stay open. |
+| `/workspace list` | Shows your saved workspaces, newest first. Press a number or Enter to reopen one, or Tab to **✕ delete** to remove it. |
+| `/workspace open <name>` | Reopens a saved workspace in a new window. Part of the name is enough. |
+
+- **Reopening** puts each tab back in its folder. Claude tabs run `claude --resume`, so
+  they continue their own conversation. Shell tabs open at the prompt.
+- **Put away a project for the day:** `/workspace close`. **Pick it up tomorrow:**
+  `/workspace list`, then press its number.
+- **What doesn't come back:** programs that were running (a dev server, a test watcher),
+  and the exact split layout. Splits reopen side by side.
+- **Where they're kept:** `~/.claude/workspaces/`, one JSON file per workspace.
 
 ## Setup
 
