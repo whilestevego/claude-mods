@@ -1,18 +1,38 @@
 # Mod ideas
 
-Suggestions for Claude Code mods (plugins in `~/.claude/mods/`). ✅ = built.
+Claude Code mods: what's built, and ideas for more. ✅ = built.
 
 ## Built
 
-- ✅ **session-id**: session ID in the footer; click copies the ID, ctrl-click copies `claude --resume <id>`, pointer hand on hover (Ghostty/Kitty/foot).
-- ✅ **context-bar**: context window bar above the prompt; hover swaps the row to the legend.
-- ✅ **turn-receipt**: time, tools, files edited, tokens and cost on each turn's "Baked for…" line.
-- ✅ **rate-limits**: 5-hour and weekly usage gauges under the context bar, warning at 90%.
-- ✅ **voice**: Claude speaks through murmur: turn summaries, needs-you, background tasks, check-ins, rate-limit warnings, /read, /tldr-aloud, /hush; quiet unless you're away; a voice per session.
-- ✅ **tldr**: a one-line Haiku TL;DR under long replies; voice speaks the same line.
-- ✅ **ghostty**: tab title summary; tab progress bar; ❓ and a notification when Claude waits on you; background tint by permission mode; `/goto` (⌘⌃G), waiting sessions first; `/workspace` save, list and reopen; `/keybind`.
-- ✅ **previews**: hover the 🖼 line under an image Claude read to see it inline.
-- ✅ **paths**: file paths in Claude's replies become links that open the file.
+- ✅ **context-bar**: the context window as a colored bar above the prompt.
+  - Hover the bar to swap it for the legend (what's using the space).
+  - `/context-bar` hides or shows it.
+- ✅ **rate-limits**: 5-hour and weekly usage meters under the context bar.
+  - Yellow at 70%, red at 90%, and a warning once a limit passes 90%.
+- ✅ **session-id**: the session ID in the footer, as `🏷️ <id>`.
+  - Blue and underlined on hover, with a pointing-hand cursor (Ghostty, Kitty, foot).
+  - Click copies the ID; ctrl-click copies `claude --resume <id>`.
+- ✅ **turn-receipt**: a receipt on each turn's "Baked for…" line.
+  - Tools run, files edited, tokens in and out, and the turn's cost.
+- ✅ **tldr**: a one-sentence Haiku summary under long replies.
+  - The voice mod speaks this same line, so a turn has one summary.
+- ✅ **paths**: file paths in Claude's replies (`src/app.ts:42`) become links.
+  - ⌘-click opens the file, or Zed, VS Code or Cursor at the line.
+- ✅ **previews**: a `🖼 … hover to preview` line under each image Claude reads.
+  - Hover it to see the picture inline, keeping its shape.
+- ✅ **voice**: Claude speaks through [murmur](https://github.com/whilestevego/murmur), only when you're away.
+  - Turn summaries, needs-you alerts, background tasks done, progress check-ins, rate-limit warnings.
+  - `/read`, `/tldr-aloud`, `/hush`.
+  - Each session gets its own voice; new speech cuts off old.
+- ✅ **ghostty**: Ghostty integration, settings all under "Ghostty" in `/config`.
+  - Tab title: a 3-word summary of the session.
+  - Tab progress bar: follows the to-do list, red after a failed tool call.
+  - ❓ in the tab and a notification when Claude waits on you (voice speaks it instead when on).
+  - `/goto` (⌘⌃G): jump between sessions, waiting ones first; `/goto next` to the longest wait.
+  - `/workspace save`, `close`, `list`, `open`: put a window of sessions away and bring it back, every conversation resumed.
+  - `/keybind`: Ghostty keys that type into Claude.
+
+Related, outside this repo: **[murmur](https://github.com/whilestevego/murmur)**, the text-to-speech tool voice uses (Kokoro on the Apple Neural Engine, 28 voices, pronunciation fixes).
 
 ## Staying in flow
 
