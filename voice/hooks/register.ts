@@ -52,6 +52,8 @@ let lastAnswer = ''
 let todos: Todo[] = []
 let checkin: { cancel(): void } | undefined
 let turnStartedAt = 0
+/** Calls the permission check put to you, until they run or are refused. */
+const asking = new Set<string>()
 const warned = new Set<string>()
 
 // "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
@@ -80,6 +82,33 @@ async function locate($: EngineInterface) {
   home = found[1] ?? ''
   const [tty, pid] = (found[2] ?? '').split(' ')
   claude = tty && pid ? { tty, pid } : null
+}
+
+/** Claude Code's record of this session (~/.claude/sessions/<pid>.json) says its permission dialog is up. */
+function asksPermission(record: string): boolean {
+  try {
+    const r = JSON.parse(record) as { status?: unknown; waitingFor?: unknown }
+    return r.status === 'waiting' && typeof r.waitingFor === 'string' && /permission/i.test(r.waitingFor)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A call that asks waits in Claude Code's dialog, or in auto mode its checker. Only the dialog marks the session
+ * record waiting, so watch it while the call is pending. (Mods never hear the classic Notification event.)
+ */
+async function watchForDialog($: EngineInterface, id: string, tool: string) {
+  if (!claude || !home) return
+  asking.add(id)
+  // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
+  for (let i = 0; i < 1200; i++) {
+    await $.clock.sleep(500)
+    if (!asking.has(id)) return
+    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${claude.pid}.json`).catch(() => ''))) {
+      return say($, `Claude needs your permission to use ${tool}.`)
+    }
+  }
 }
 
 // Every running session shares one small table of who speaks with which voice.
@@ -185,12 +214,19 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // Permission prompts reach mods as Claude Code's Notification hook event.
-  on('classic.Notification', ($, e, next) => {
-    if (cfg.needsYou && e.notification_type === 'permission_prompt') {
-      void say($, prose(e.message) || 'Claude needs your permission.')
+  on('tool.check', async ($, e, next) => {
+    const r = await next(e)
+    if (cfg.needsYou && r.decision === 'ask' && e.tool_use_id) void watchForDialog($, e.tool_use_id, e.tool).catch(() => {})
+    return r
+  }).catch(($, e, next) => next(e))
+
+  // A call that ran or was refused is no longer waiting on you.
+  on('tool.call', async ($, e, next) => {
+    try {
+      return await next(e)
+    } finally {
+      asking.delete((e as { tool_use_id?: string }).tool_use_id ?? '')
     }
-    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {

@@ -1,4 +1,4 @@
-import { test, expect } from 'claude-code/testing'
+import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 // The test environment has timers; the plugin typings (no DOM, no Node) just don't declare them.
@@ -8,6 +8,8 @@ const settle = () => new Promise(r => setTimeout(r, 20))
 /** Fakes the machine: Claude on /dev/ttys004 among Ghostty's terminals; `written` collects what reaches the tab. */
 function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } = {}) {
   const written: string[] = []
+  /** Claude Code's record of this session: 'dialog' while its permission dialog is up. */
+  const claude = { status: 'busy' }
   const focused: string[] = []
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
@@ -19,7 +21,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
       return out('A\t/dev/ttys000\t✳ Plan review\t/home/me/hobby/redouble\nB\t/dev/ttys001\t~\t/home/me\nC\t/dev/ttys004\t✳ Murmur Mods\t/home/me/.claude\n')
     }
     if (script.includes('ps -ax')) return out('/dev/ttys000\n/dev/ttys004\n')
-    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '')
+    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004 4242\n' : '')
   })
   on('session.id', () => ({ value: 's' }) as never)
   on('session.messages', () => ({ value: [{ role: 'user', text: 'Build the progress bar', toolUses: [] }] }) as never)
@@ -33,14 +35,21 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
   on('session.end', () => ({ sessionId: 's' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('tool.call', () => ({ result: {}, text: '', isError: opts.toolFails === true }) as never)
-  on('classic.Notification', () => ({}))
+  on('tool.check', () => ({ decision: 'ask' }) as never)
+  on('fs.read', (_$, e) => {
+    if ((e as { path: string }).path !== '/home/me/.claude/sessions/4242.json') return { deny: 'missing' } as never
+    const waiting = claude.status === 'dialog' ? { status: 'waiting', waitingFor: 'permission prompt' } : { status: 'busy' }
+    return { value: JSON.stringify({ pid: 4242, ...waiting }) } as never
+  })
   on('ui.render', () => ({ type: 'Box', children: [] }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
-  return Object.assign(written, { focused })
+  return Object.assign(written, { focused, claude })
 }
 
 const start = { cwd: '/', surface: 'terminal' as const, isInteractive: true }
 const submit = { text: 'Build the progress bar', origin: { kind: 'user' } } as never
+/** A Bash call that asks permission (its check, then a wait in Claude Code), as `id`. */
+const asks = ($: { tool: { check(e: never): Promise<unknown> } }, id: string) => $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: id } as never)
 const done = { answer: 'Done.', durationMs: 5000, isAborted: false, turnId: 't', reason: 'answer' } as never
 
 test('a turn shows a busy bar, follows the todo list, and clears at the end', async ($, on) => {
@@ -71,24 +80,44 @@ test('a failed tool call turns the bar red', async ($, on) => {
 })
 
 test('waiting on you: ❓ in the title, a paused bar and a notification', async ($, on) => {
+  const clock = mock.clock(on)
   const w = machine(on)
   await $.session.start(start)
   await $.prompt.submit(submit)
-  await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' } as never)
+  await asks($, 'u1')
+  w.claude.status = 'dialog'
+  await clock.advance(600)
   await settle()
   expect(w).toContain('\x1b]2;❓ Tab Progress Bar\x07')
   expect(w).toContain('\x1b]9;4;4\x07')
   expect(w).toContain('\x1b]777;notify;Claude Code;Claude needs your permission to use Bash\x07')
-  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)  // you allowed it: the tool ran
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)  // you allowed it: the tool ran
   await settle()
   expect(w.at(-2) + w.at(-1)!).toContain('✳ Tab Progress Bar')
 })
 
+test('auto mode approving a call that asks is not waiting on you', async ($, on) => {
+  const clock = mock.clock(on)
+  const w = machine(on)
+  await $.session.start(start)
+  await $.prompt.submit(submit)
+  await asks($, 'u1')
+  await clock.advance(1600)                                      // the checker thinks; no dialog
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
+  w.claude.status = 'dialog'                                     // a later dialog is another call's
+  await clock.advance(1000)
+  await settle()
+  expect(w.some(s => s.includes('❓') || s.includes(']777;'))).toBe(false)
+})
+
 test('no notification when the voice mod says it out loud', async ($, on) => {
+  const clock = mock.clock(on)
   const w = machine(on, { voiceNeedsYou: true })
   await $.session.start(start)
   await $.prompt.submit(submit)
-  await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' } as never)
+  await asks($, 'u1')
+  w.claude.status = 'dialog'
+  await clock.advance(600)
   await settle()
   expect(w).toContain('\x1b]2;❓ Tab Progress Bar\x07')
   expect(w.some(s => s.includes(']777;'))).toBe(false)
@@ -98,7 +127,7 @@ test('everything off writes nothing', { options: { tabTitle: false, tabProgress:
   const w = machine(on)
   await $.session.start(start)
   await $.prompt.submit(submit)
-  await $.classic.Notification({ message: 'x', notification_type: 'permission_prompt' } as never)
+  await asks($, 'u1')
   await $.turn.complete(done)
   await settle()
   expect(w).toEqual([])

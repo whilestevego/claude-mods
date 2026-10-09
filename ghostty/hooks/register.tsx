@@ -9,7 +9,7 @@ import {
 import type { Session, Todo } from './term'
 import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, withInclude } from './keybinds'
 import type { Binding } from './keybinds'
-import { badge, nextWaiting, parseEntry, rank } from './registry'
+import { asksPermission, badge, nextWaiting, parseEntry, rank } from './registry'
 import type { Entry, Ranked, Status } from './registry'
 import { ask, bare, clean, context } from './title'
 import {
@@ -49,6 +49,8 @@ let todos: Todo[] = []
 let hasFailed = false
 let isRunning = false
 let isWaiting = false
+/** Calls the permission check put to you, until they run or are refused. */
+const asking = new Set<string>()
 let home = ''
 /** The sessions the /goto picker shows. */
 let picks: Ranked[] = []
@@ -139,6 +141,20 @@ async function waitOnYou($: EngineInterface, why: string) {
   void setStatus($, 'waiting').catch(() => {})
   await Promise.all([drawTitle($), drawBar($)])
   if (shouldNotify(cfg.waitingNotification, await voiceSpeaksIt($))) await send($, notify('Claude Code', why))
+}
+
+/**
+ * A call that asks waits in Claude Code's dialog, or in auto mode its checker. Only the dialog marks the session
+ * record waiting, so watch it while the call is pending. (Mods never hear the classic Notification event.)
+ */
+async function watchForDialog($: EngineInterface, id: string, why: string) {
+  asking.add(id)
+  // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
+  for (let i = 0; i < 1200; i++) {
+    await $.clock.sleep(500)
+    if (!asking.has(id)) return
+    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) return waitOnYou($, why)
+  }
 }
 
 async function stopWaiting($: EngineInterface) {
@@ -559,6 +575,7 @@ export const register: Register = (on, options) => {
   // Every tool call: a permission prompt or a question waits inside next(); its return means you answered.
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
+    asking.delete((e as { tool_use_id?: string }).tool_use_id ?? '')
     const failed = ran.deny === undefined && ran.isError === true
     if (failed !== hasFailed) {
       hasFailed = failed
@@ -568,9 +585,10 @@ export const register: Register = (on, options) => {
     return ran
   }).catch(($, e, next) => next(e))
 
-  on('classic.Notification', async ($, e, next) => {
-    if (e.notification_type === 'permission_prompt') void waitOnYou($, e.message)
-    return next(e)
+  on('tool.check', async ($, e, next) => {
+    const r = await next(e)
+    if (r.decision === 'ask' && e.tool_use_id) void watchForDialog($, e.tool_use_id, `Claude needs your permission to use ${e.tool}`).catch(() => {})
+    return r
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {

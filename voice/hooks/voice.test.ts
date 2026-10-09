@@ -32,7 +32,8 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('command.run', () => ({ text: '' }))
-  on('classic.Notification', () => ({}))
+  on('tool.check', () => ({ decision: 'ask' }) as never)
+  on('tool.call', () => ({ result: {}, text: '' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
   return spoken
@@ -89,12 +90,20 @@ test('/read says the whole last answer with code omitted, even when focused', as
   expect(spoken.at(-1)?.at(-1)).toBe('Here:\n Code omitted. \nThat is all.')
 })
 
-test('a permission prompt is announced', async ($, on) => {
-  const spoken = machine(on, { tty: '' })
+test('a permission dialog is announced; auto mode approving a call is not', async ($, on) => {
+  const clock = mock.clock(on)
+  const files: Record<string, string> = { '/home/me/.claude/sessions/4242.json': JSON.stringify({ status: 'busy' }) }
+  const spoken = machine(on, { tty: '' }, files)
   await $.session.start(start)
-  await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' } as never)
+  const asks = (id: string) => $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: id } as never)
+  await asks('u1')
+  await clock.advance(1600)                                        // the checker approves; no dialog
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
+  await asks('u2')
+  files['/home/me/.claude/sessions/4242.json'] = JSON.stringify({ status: 'waiting', waitingFor: 'permission prompt' })
+  await clock.advance(600)
   await settle()
-  expect(spoken.at(-1)?.at(-1)).toBe('Claude needs your permission to use Bash')
+  expect(spoken.map(s => s.at(-1))).toEqual(['Claude needs your permission to use Bash.'])
 })
 
 test('a fixed voice wins over the session voice, and claims nothing', { options: { voice: 'bf_emma', summaryStyle: 'first-sentence' } }, async ($, on) => {
@@ -148,7 +157,6 @@ test('a rate limit is warned about once per window', async ($, on) => {
 test('long turns check in with the todo in progress', { options: { checkinMinutes: 1 } }, async ($, on) => {
   const clock = mock.clock(on)
   const spoken = machine(on, { tty: '' })
-  on('tool.call', () => ({ result: {}, text: '' }) as never)
   await $.session.start(start)
   await $.prompt.submit({ text: 'Build it', origin: { kind: 'user' } } as never)
   await $.tool.call({ tool: 'TodoWrite', todos: [
