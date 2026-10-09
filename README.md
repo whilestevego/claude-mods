@@ -82,8 +82,6 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
   and turns red when a command fails.
 - **❓ waiting on you:** a ❓ in the tab title and a desktop notification when Claude
   needs a permission or an answer. If voice is on, it speaks instead of notifying.
-- **Mode tint:** the background takes a faint tint in risky permission modes: blue for
-  plan, amber for accept edits, red for bypass permissions.
 - **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
 - **`/goto`** (or ⌘⌃G) lists your open Claude sessions, the ones waiting on you first,
   and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;

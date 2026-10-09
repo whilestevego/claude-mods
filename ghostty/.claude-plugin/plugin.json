@@ -1,7 +1,7 @@
 {
   "name": "ghostty",
   "version": "0.1.0",
-  "description": "Ghostty integration: a 3-word summary as the tab title, a tab progress bar, ❓ and a notification when Claude waits on you, a background tint for the permission mode, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
+  "description": "Ghostty integration: a 3-word summary as the tab title, a tab progress bar, ❓ and a notification when Claude waits on you, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
   "userConfig": {
     "tabTitle": {
       "type": "boolean",
@@ -37,18 +37,6 @@
         "never"
       ],
       "default": "auto"
-    },
-    "modeTint": {
-      "type": "boolean",
-      "title": "Ghostty: tint the background by permission mode",
-      "description": "Plan blue, accept edits amber, auto purple, don't ask teal, bypass permissions red; default mode keeps your background",
-      "default": true
-    },
-    "tintStrength": {
-      "type": "number",
-      "title": "Ghostty: tint strength (%)",
-      "description": "How far the background moves toward the mode's color",
-      "default": 10
     },
     "keybinds": {
       "type": "boolean",

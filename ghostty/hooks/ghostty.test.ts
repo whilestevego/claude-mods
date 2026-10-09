@@ -19,7 +19,6 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
       return out('A\t/dev/ttys000\t✳ Plan review\t/home/me/hobby/redouble\nB\t/dev/ttys001\t~\t/home/me\nC\t/dev/ttys004\t✳ Murmur Mods\t/home/me/.claude\n')
     }
     if (script.includes('ps -ax')) return out('/dev/ttys000\n/dev/ttys004\n')
-    if (script.includes('+show-config')) return out(script.includes('--default') ? 'background = #282c34\n' : '')
     return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '')
   })
   on('config.list', () => ({ value: opts.voiceNeedsYou ? [{ key: 'voice.needsYou', value: true }] : [] }) as never)
@@ -33,7 +32,6 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('tool.call', () => ({ result: {}, text: '', isError: opts.toolFails === true }) as never)
   on('classic.Notification', () => ({}))
-  on('classic.UserPromptSubmit', () => ({}))
   on('ui.render', () => ({ type: 'Box', children: [] }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   return Object.assign(written, { focused })
@@ -102,34 +100,6 @@ test('everything off writes nothing', { options: { tabTitle: false, tabProgress:
   await $.turn.complete(done)
   await settle()
   expect(w).toEqual([])
-})
-
-const hint = (text: string, isWorking = false) =>
-  ({ hint: text, isDraft: false, isWorking }) as never
-
-test('the background follows the permission mode, and is given back when Claude exits', async ($, on) => {
-  const w = machine(on)
-  await $.session.start(start)
-  const ui = await $.ui.mount({ plugin: 'ghostty', surface: 'terminal', component: 'PromptHint', props: hint('⏵⏵ accept edits on (shift+tab to cycle)') })
-  await settle()
-  expect(w.at(-1)).toBe('\x1b]11;#3d3730\x07')  // #282c34 shaded 10% toward amber
-  await ui.unmount()
-  await $.ui.mount({ plugin: 'ghostty', surface: 'terminal', component: 'PromptHint', props: hint('? for shortcuts') })
-  await settle()
-  expect(w.at(-1)).toBe('\x1b]111\x07')
-  await $.classic.UserPromptSubmit({ prompt: 'x', permission_mode: 'bypassPermissions' } as never)
-  await settle()
-  expect(w.at(-1)).toBe('\x1b]11;#3c2e36\x07')
-  await $.session.end({ reason: 'exit' } as never)
-  expect(w.at(-1)).toContain('\x1b]111\x07')
-})
-
-test('no tint while working with a hint that names no mode', async ($, on) => {
-  const w = machine(on)
-  await $.session.start(start)
-  await $.ui.mount({ plugin: 'ghostty', surface: 'terminal', component: 'PromptHint', props: hint('esc to interrupt', true) })
-  await settle()
-  expect(w.some(s => s.includes(']11;') || s.includes(']111'))).toBe(false)
 })
 
 test('/goto <words> jumps straight to the one matching session', async ($, on) => {

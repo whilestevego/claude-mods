@@ -1,8 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import {
-  backgroundFrom, claudeSessions, matchSessions, mix, modeFromHint, notify, percentDone, progress, Progress,
-  resetBackground, runningBar, safe, shortFolder, shouldNotify, tabTitle, tintSequence, title,
+  claudeSessions, matchSessions, notify, percentDone, progress, Progress, runningBar, safe, shortFolder, shouldNotify, tabTitle, title,
 } from './term'
 
 test('sequences', () => {
@@ -40,28 +39,6 @@ test('notify unless the voice mod says it', () => {
   expect(shouldNotify('never', false)).toBe(false)
 })
 
-
-test('mode from the hint line', () => {
-  expect(modeFromHint('⏵⏵ accept edits on (shift+tab to cycle)')).toBe('acceptEdits')
-  expect(modeFromHint('⏸ plan mode on (shift+tab to cycle)')).toBe('plan')
-  expect(modeFromHint('⏵⏵ bypass permissions on')).toBe('bypassPermissions')
-  expect(modeFromHint('? for shortcuts')).toBeUndefined()
-})
-
-test('tints mix toward the mode color; default resets', () => {
-  expect(mix('#282c34', '#ef4444', 0)).toBe('#282c34')
-  expect(mix('#282c34', '#ef4444', 100)).toBe('#ef4444')
-  expect(mix('#000000', '#ffffff', 10)).toBe('#1a1a1a')
-  expect(mix('nope', '#ffffff', 10)).toBeUndefined()
-  expect(tintSequence('bypassPermissions', '#282c34', 10)).toBe('\x1b]11;#3c2e36\x07')
-  expect(tintSequence('default', '#282c34', 10)).toBe(resetBackground)
-})
-
-test('background from ghostty +show-config', () => {
-  expect(backgroundFrom('font-size = 13\nbackground = #1e1e2e\n', 'background = #282c34')).toBe('#1e1e2e')
-  expect(backgroundFrom('', 'theme = \nbackground = #282c34\n')).toBe('#282c34')
-  expect(backgroundFrom('', '')).toBe('#282c34')
-})
 
 test('Claude sessions from Ghostty terminals and ps', () => {
   const terms = 'A\t/dev/ttys000\t✳ Plan review\t/u/redouble\nB\t/dev/ttys001\t~/hobby\t/u/hobby\nC\t/dev/ttys004\t✳ Murmur Mods\t/u/.claude\n'

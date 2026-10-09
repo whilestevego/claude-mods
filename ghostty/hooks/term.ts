@@ -51,64 +51,6 @@ export function shouldNotify(setting: string, voiceSpeaksIt: boolean): boolean {
   return setting === 'always' || (setting === 'auto' && !voiceSpeaksIt)
 }
 
-// ─── Mode tint ───────────────────────────────────────────────────────────────
-
-export type Mode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'
-
-/** What each mode tints the background toward; default mode keeps your own background. */
-export const TINTS: Record<Mode, string | null> = {
-  default: null,
-  plan: '#3b82f6', // blue: reading and planning, nothing changes
-  acceptEdits: '#f59e0b', // amber: edits land without asking
-  auto: '#a855f7', // purple: a classifier decides
-  dontAsk: '#14b8a6', // teal: unapproved tools are denied
-  bypassPermissions: '#ef4444', // red: nothing asks
-}
-
-/** The mode Claude Code's hint line names ("⏵⏵ accept edits on"), or undefined when it names none. */
-export function modeFromHint(hint: string): Mode | undefined {
-  const h = hint.toLowerCase()
-  if (h.includes('bypass permissions')) return 'bypassPermissions'
-  if (h.includes('accept edits')) return 'acceptEdits'
-  if (h.includes('plan mode')) return 'plan'
-  if (h.includes('auto mode')) return 'auto'
-  if (h.includes("don't ask") || h.includes('dont ask')) return 'dontAsk'
-  return undefined
-}
-
-export function asMode(value: string | undefined): Mode | undefined {
-  return value && value in TINTS ? (value as Mode) : undefined
-}
-
-const hex = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0')
-
-/** `base` moved `percent`% of the way toward `toward`, as #rrggbb; undefined for anything unparsable. */
-export function mix(base: string, toward: string, percent: number): string | undefined {
-  const rgb = (c: string) => (/^#?([0-9a-f]{6})$/i.exec(c.trim())?.[1]?.match(/../g) ?? []).map(x => parseInt(x, 16))
-  const [a, b] = [rgb(base), rgb(toward)]
-  if (a.length !== 3 || b.length !== 3) return undefined
-  const t = Math.max(0, Math.min(100, percent)) / 100
-  return `#${a.map((v, i) => hex(v + (b[i]! - v) * t)).join('')}`
-}
-
-/** OSC 11 sets this terminal's background; OSC 111 puts back the configured one. */
-export const background = (color: string) => `${ESC}]11;${color}${BEL}`
-export const resetBackground = `${ESC}]111${BEL}`
-
-/** The sequence for a mode: a tint of `base`, or the reset for default mode. */
-export function tintSequence(mode: Mode, base: string, percent: number): string {
-  const toward = TINTS[mode]
-  const color = toward ? mix(base, toward, percent) : undefined
-  return color ? background(color) : resetBackground
-}
-
-/** Ghostty's background from `ghostty +show-config` output: your setting, else the default's. */
-export function backgroundFrom(config: string, defaults: string): string {
-  const pick = (text: string) => /^background\s*=\s*(#?[0-9a-f]{6})\s*$/im.exec(text)?.[1]
-  const c = pick(config) ?? pick(defaults) ?? '#282c34'
-  return c.startsWith('#') ? c : `#${c}`
-}
-
 // ─── /goto ───────────────────────────────────────────────────────────────────
 
 export type Session = { id: string; tty: string; title: string; folder: string; isMe: boolean }

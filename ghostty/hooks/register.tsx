@@ -4,10 +4,9 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { WorkspaceRow } from '../types'
 
 import {
-  asMode, backgroundFrom, claudeSessions, matchSessions, modeFromHint, notify, progress, Progress, resetBackground,
-  runningBar, shortFolder, shouldNotify, tabTitle, tintSequence, title,
+  claudeSessions, matchSessions, notify, progress, Progress, runningBar, shortFolder, shouldNotify, tabTitle, title,
 } from './term'
-import type { Mode, Session, Todo } from './term'
+import type { Session, Todo } from './term'
 import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, withInclude } from './keybinds'
 import type { Binding } from './keybinds'
 import { badge, nextWaiting, parseEntry, rank } from './registry'
@@ -25,8 +24,6 @@ type Config = {
   tabProgress: boolean
   waitingBadge: boolean
   waitingNotification: string
-  modeTint: boolean
-  tintStrength: number
   keybinds: boolean
 }
 
@@ -37,8 +34,6 @@ function config(o: PluginOptions): Config {
     tabProgress: o.tabProgress !== false,
     waitingBadge: o.waitingBadge !== false,
     waitingNotification: o.waitingNotification === 'always' || o.waitingNotification === 'never' ? o.waitingNotification : 'auto',
-    modeTint: o.modeTint !== false,
-    tintStrength: typeof o.tintStrength === 'number' && o.tintStrength > 0 ? o.tintStrength : 10,
     keybinds: o.keybinds !== false,
   }
 }
@@ -56,9 +51,6 @@ let hasFailed = false
 let isRunning = false
 let isWaiting = false
 let home = ''
-/** Your Ghostty background, which the mode tint shades. */
-let base = '#282c34'
-let mode: Mode = 'default'
 /** The sessions the /goto picker shows. */
 let picks: Ranked[] = []
 let status: Status = 'idle'
@@ -81,21 +73,6 @@ async function locate($: EngineInterface) {
   const found = (await $.process.run(['sh', '-c', `echo "$HOME"\n${FIND_TTY}`])).stdout.trim().split('\n')
   home = found[0] ?? ''
   ;[tty = '', pid = ''] = (found[1] ?? '').split(' ')
-}
-
-// Your configured background (or Ghostty's default), read once: the tint is a shade of it.
-async function readBackground($: EngineInterface) {
-  const show = (flag: string) => `"$GHOSTTY_BIN_DIR/ghostty" +show-config ${flag} 2>/dev/null | grep -E '^background ='`
-  const [mine, defaults] = await Promise.all(
-    ['', '--default'].map(f => $.process.run(['sh', '-c', show(f)]).then(r => r.stdout).catch(() => '')),
-  )
-  base = backgroundFrom(mine ?? '', defaults ?? '')
-}
-
-async function setMode($: EngineInterface, next: Mode) {
-  if (!cfg.modeTint || next === mode) return
-  mode = next
-  await send($, tintSequence(mode, base, cfg.tintStrength))
 }
 
 // Every Ghostty terminal as "id<TAB>tty<TAB>title<TAB>folder"; plus the ttys running Claude.
@@ -380,7 +357,6 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await locate($)
     void setStatus($, 'idle').catch(() => {})
-    if (cfg.modeTint) await readBackground($)
     await $.command.register({ name: 'keybind', description: 'Ghostty keys that type into Claude: /keybind, /keybind add <keys> <text>, /keybind remove <keys>' })
     // First start: install the default keys once (a later /keybind remove sticks, since the file then exists).
     if (cfg.keybinds && (await readBindings($).catch(() => null))?.text === null) void saveBindings($, DEFAULTS).catch(() => {})
@@ -389,26 +365,11 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // Claude exits: give the terminal its own background back and clear the bar.
+  // Claude exits: clear the bar.
   on('session.end', async ($, e, next) => {
-    await send($, (mode !== 'default' ? resetBackground : '') + (cfg.tabProgress ? progress(Progress.hide) : ''))
+    if (cfg.tabProgress) await send($, progress(Progress.hide))
     return next(e)
   })
-
-  // The hint line names the permission mode ("⏵⏵ accept edits on") and redraws the moment Shift+Tab changes it.
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const named = modeFromHint(e.props.hint)
-    if (named) void setMode($, named)
-    else if (!e.props.isWorking && /\? for shortcuts/.test(e.props.hint)) void setMode($, 'default')
-    return next(e)
-  })
-
-  // Backup: every prompt carries the mode Claude Code is actually in.
-  on('classic.UserPromptSubmit', async ($, e, next) => {
-    const named = asMode(e.permission_mode)
-    if (named) void setMode($, named)
-    return next(e)
-  }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'goto' }, async ($, e) => {
     const ranked = await rankedSessions($).catch((err: Error) => err)
