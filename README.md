@@ -42,13 +42,6 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 - Nothing to do. **TL;DR: long reply** in `/config` sets how long a reply must be
   (600 characters by default).
 
-### paths
-
-Turns file paths in Claude's replies, like `src/app.ts:42`, into links.
-
-- ⌘-click a path to open the file.
-- Set **Paths: open with** to `zed`, `vscode` or `cursor` to open it in that editor at the
-  right line instead of the file's default app.
 
 ### previews
 
@@ -126,7 +119,7 @@ up where it left off.
 
 3. Start a new Claude session.
 
-To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/paths`.
+To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/tldr`.
 
 ## Requirements
 
