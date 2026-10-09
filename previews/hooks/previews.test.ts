@@ -16,13 +16,13 @@ test('an image Read shows its picture only while the pointer is on the 🖼 line
     props: { tool: 'Read', input: { file_path: '/tmp/shot.png' }, isRunning: false, isErrored: false, isInterrupted: false } as never,
   })
   const picture = () => ui.find({ type: 'Image' })
-  expect(await ui.find({ type: 'Text', text: /hover to preview/, in: 'preview-toolu_1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /hover to preview/, in: 'preview-toolu_1~0' })).toBeDefined()
   expect(await picture()).toBeUndefined()
-  await ui.pointer({ type: 'enter', x: 3, y: 0, in: 'preview-toolu_1' })
+  await ui.pointer({ type: 'enter', x: 3, y: 0, in: 'preview-toolu_1~0' })
   const shown = await picture()
   expect(shown).toBeDefined()
   expect(JSON.stringify(shown)).toContain('/tmp/shot.png')
-  await ui.pointer({ type: 'leave', x: 3, y: 0, in: 'preview-toolu_1' })
+  await ui.pointer({ type: 'leave', x: 3, y: 0, in: 'preview-toolu_1~0' })
   expect(await picture()).toBeUndefined()
 })
 
@@ -35,4 +35,24 @@ test('other tool rows are left alone', async ($, on) => {
   } as never)
   expect(await ui.find({ type: 'Image' })).toBeUndefined()
   expect(calls).toBe(1)
+})
+
+test('a collapsed row ("Read 2 files") gets a 🖼 line for each image in it', async ($, on) => {
+  on('process.run', (_$, e) => {
+    const argv = e.argv as string[]
+    const stdout = argv[0] === 'sips' ? '/x\n  pixelWidth: 800\n  pixelHeight: 400\n' : '/home/me\n'
+    return { value: { exitCode: 0, stdout, stderr: '' } } as never
+  })
+  on('fs.stat', () => ({ value: { mtimeMs: 1 } }) as never)
+  on('ui.render', () => ({ type: 'Text', children: ['Read 3 files'] }) as never)
+  on('ui.message', () => ({}) as never)
+  const call = (file_path: string) => ({ tool: 'Read', input: { file_path }, isRunning: false, isErrored: false, isInterrupted: false })
+  const ui = await $.ui.mount({
+    plugin: 'previews', surface: 'terminal', component: 'ToolGroup', requestId: 'grp_1',
+    props: { calls: [call('/tmp/a.png'), call('/tmp/notes.md'), call('/tmp/b.jpg')], isActive: false, isExpanded: false } as never,
+  })
+  expect(await ui.find({ type: 'Text', text: /a\.png · hover to preview/, in: 'preview-grp_1~0' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /b\.jpg · hover to preview/, in: 'preview-grp_1~1' })).toBeDefined()
+  await ui.pointer({ type: 'enter', x: 3, y: 0, in: 'preview-grp_1~1' })
+  expect(JSON.stringify(await ui.find({ type: 'Image' }))).toContain('.png')  // b.jpg, converted
 })

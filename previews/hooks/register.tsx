@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { Elements, EngineInterface, Register, RenderNode } from 'claude-code'
 
 import { boxFor, cacheName, imagePath, needsConversion, parseSize } from './image'
 
@@ -29,35 +29,62 @@ function prepared$($: EngineInterface, path: string) {
   return prepared.get(path)!
 }
 
+/** How tall a preview is drawn, from the setting. */
+let previewRows = 14
+
+/** A row plus a 🖼 line per image it read; a picture only while the pointer is on its line. */
+async function withPreviews($: EngineInterface, ui: Elements['terminal'], requestId: string, columns: number, row: RenderNode, paths: string[]) {
+  const { Box, Client, Image } = ui
+  const current = await read($, shown)
+  const maxColumns = Math.max(10, columns - 6)
+  const lines = await Promise.all(
+    paths.map(async (path, i) => {
+      const id = `${requestId}~${i}`
+      const name = path.split('/').pop() ?? path
+      const isShown = current === id
+      const pic = isShown ? await prepared$($, path) : null
+      const box = pic && boxFor(pic.width, pic.height, previewRows, maxColumns)
+      return (
+        <Box flexDirection="column">
+          <Client key={`preview-${id}`} module="./preview.tsx" props={{ name, shown: isShown }} />
+          {pic && box && (
+            <Box marginLeft={4}>
+              <Image source={{ file: pic.png, format: 'png' }} rows={box.rows} columns={box.columns} alt={name} />
+            </Box>
+          )}
+        </Box>
+      )
+    }),
+  )
+  return (
+    <Box flexDirection="column">
+      {row}
+      {lines}
+    </Box>
+  )
+}
+
 export const register: Register = (on, options) => {
-  const rows = typeof options.rows === 'number' && options.rows > 0 ? Math.min(60, options.rows) : 14
+  previewRows = typeof options.rows === 'number' && options.rows > 0 ? Math.min(60, options.rows) : 14
 
   on('session.start', async ($, e, next) => {
     home = (await $.process.run(['sh', '-c', 'echo "$HOME"'])).stdout.trim()
     return next(e)
   })
 
-  // An image Read's row, plus the 🖼 line; the picture itself only while the pointer is on that line.
+  // A single tool row (expanded transcripts, --verbose).
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const path = imagePath(e.props.tool, e.props.input)
     if (!path || e.surface !== 'terminal') return next(e)
-    const row = await next(e)
-    const { Box, Client, Image } = $.ui.resolve(e)
-    const isShown = (await read($, shown)) === e.requestId
-    const name = path.split('/').pop() ?? path
-    const pic = isShown ? await prepared$($, path) : null
-    const box = pic && boxFor(pic.width, pic.height, rows, Math.max(10, (e.viewport?.columns ?? 80) - 6))
-    return (
-      <Box flexDirection="column">
-        {row}
-        <Client key={`preview-${e.requestId}`} module="./preview.tsx" props={{ name, shown: isShown }} />
-        {pic && box && (
-          <Box marginLeft={4}>
-            <Image source={{ file: pic.png, format: 'png' }} rows={box.rows} columns={box.columns} alt={name} />
-          </Box>
-        )}
-      </Box>
-    )
+    return withPreviews($, $.ui.resolve(e), e.requestId, e.viewport?.columns ?? 80, await next(e), [path])
+  })
+
+  // The collapsed row ("Read 3 files") that groups tool calls by default.
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    if (e.surface !== 'terminal' || e.props.isExpanded) return next(e)
+    const paths = e.props.calls.map(c => imagePath(c.tool, c.input)).filter((p): p is string => p !== undefined)
+    if (paths.length === 0) return next(e)
+    return withPreviews($, $.ui.resolve(e), e.requestId, e.viewport?.columns ?? 80, await next(e), paths)
   })
 
   on('ui.message', async ($, e, next) => {

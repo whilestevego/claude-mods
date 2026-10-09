@@ -6,6 +6,6 @@ const PreviewLabel: ClientModule<{ name: string; shown: boolean }> = ({ name, sh
   surface.onPointer(ev => {
     if (ev.type === 'enter' || ev.type === 'leave') surface.post(ev.type)
   })
-  return <Text dimColor={!shown}>  🖼 {shown ? name : `${name} · hover to preview`}</Text>
+  return <Text dimColor={!shown}>  🖼  {shown ? name : `${name} · hover to preview`}</Text>
 }
 export default PreviewLabel
