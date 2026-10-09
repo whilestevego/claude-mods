@@ -35,6 +35,12 @@
       "description": "Turns shorter than this finish without a summary",
       "default": 20
     },
+    "chime": {
+      "type": "boolean",
+      "title": "Chime",
+      "description": "Play a soft chime before speaking",
+      "default": true
+    },
     "needsYou": {
       "type": "boolean",
       "title": "Needs you",

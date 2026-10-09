@@ -16,6 +16,7 @@ type Config = {
   rateLimitWarnings: boolean
   rateLimitPercent: number
   speed: number
+  chime: boolean
   voice: string
   voices: string[]
 }
@@ -34,6 +35,7 @@ function config(o: PluginOptions): Config {
     rateLimitWarnings: o.rateLimitWarnings !== false,
     rateLimitPercent: num(o.rateLimitPercent, 90),
     speed: num(o.speed, 1),
+    chime: o.chime !== false,
     voice: typeof o.voice === 'string' ? o.voice.trim() : '',
     voices: typeof o.voices === 'string' ? voiceList(o.voices) : [],
   }
@@ -138,6 +140,9 @@ async function isAway($: EngineInterface): Promise<boolean> {
 // Interrupt, don't stack: each new line cuts off whatever is still playing.
 async function say($: EngineInterface, text: string, always = false) {
   if (muted || !text.trim() || (!always && !(await isAway($)))) return
+  // A soft bell first (the mod's chime.wav), so speech never starts out of nowhere. Not awaited: murmur takes
+  // about as long to get ready as the bell rings.
+  if (cfg.chime) void $.process.run(['afplay', `${$.plugin.root}/chime.wav`]).catch(() => null)
   const argv = ['murmur', '--interrupt', '--speed', String(cfg.speed)]
   const voice = cfg.voice || sessionVoice
   if (voice) argv.push('--voice', voice)

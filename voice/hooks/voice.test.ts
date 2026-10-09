@@ -10,13 +10,16 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  */
 function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, alive: string[] = []) {
   const spoken: string[][] = []
+  /** What reached the speakers, in order: 'chime' or 'speech'. */
+  const heard: string[] = []
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
     if (argv[0] === 'sh' && argv[2]?.includes('kill -0')) return out(argv.slice(4).filter(p => alive.includes(p)).join('\n'))
     if (argv[0] === 'sh') return out('ghostty\n/home/me\nttys004 4242\n')
     if (argv[0] === 'osascript') return out(focused.tty)
-    if (argv[0] === 'murmur') spoken.push(argv)
+    if (argv[0] === 'murmur') spoken.push(argv), heard.push('speech')
+    if (argv[0] === 'afplay') heard.push(argv[1]!.endsWith('/chime.wav') ? 'chime' : argv[1]!)
     return out('')
   })
   on('fs.read', (_$, e) => {
@@ -36,7 +39,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('tool.call', () => ({ result: {}, text: '' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
-  return spoken
+  return Object.assign(spoken, { heard })
 }
 
 const TABLE = '/home/me/Library/Caches/claude-voice/voices.json'
@@ -190,4 +193,22 @@ test('when tldr has no line for the turn (a short reply), voice writes its own',
   await $.turn.complete(turn(60_000, 'Short.'))
   await settle()
   expect(spoken.at(-1)?.at(-1)).toBe('Own line.')
+})
+
+test('a soft chime plays before each spoken line', async ($, on) => {
+  const spoken = machine(on, { tty: '' })
+  await $.session.start(start)
+  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await settle()
+  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await settle()
+  expect(spoken.heard).toEqual(['chime', 'speech', 'chime', 'speech'])
+})
+
+test('no chime when it is off', { options: { chime: false } }, async ($, on) => {
+  const spoken = machine(on, { tty: '' })
+  await $.session.start(start)
+  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await settle()
+  expect(spoken.heard).toEqual(['speech'])
 })

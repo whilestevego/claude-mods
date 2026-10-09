@@ -60,6 +60,8 @@ over you while you're watching.
   you're close to a usage limit.
 - `/read` reads Claude's last reply aloud.
 - `/tldr-aloud` gives a spoken 2–3 sentence summary of the session so far.
+- A soft chime plays before it speaks, so a voice never starts out of nowhere. Turn it
+  off with **Chime** in `/config`.
 - `/hush` mutes this session; run it again to unmute.
 - Each open session gets its own voice. Pick one fixed voice, or the list sessions choose
   from, in `/config` under **voice**.
