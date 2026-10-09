@@ -20,3 +20,4 @@ export function cleanLine(reply: string): string {
     .trim()
   return line.length >= 3 && line.length <= 240 ? line : ''
 }
+

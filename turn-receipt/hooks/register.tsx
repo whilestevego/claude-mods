@@ -54,7 +54,17 @@ export const register: Register = on => {
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     const receipt = (await read($, byDuration))[String(e.props.durationMs)]
     if (!receipt?.doneAt) return next(e) // receipts saved before doneAt existed keep the plain line
-    const { Text } = $.ui.resolve(e)
-    return <Text dimColor>{fullLine(e.props.word, receipt)}</Text>
+    const { Box, Text } = $.ui.resolve(e)
+    // The tldr mod's line for this turn goes under the receipt: this hook replaces the line tldr would add it to.
+    const tldr = ((await $.state.get({ plugin: 'tldr', key: 'byDuration' } as never)) as { value?: Record<string, string> }).value
+    const summary = tldr?.[String(e.props.durationMs)]
+    const line = <Text dimColor>{fullLine(e.props.word, receipt)}</Text>
+    if (!summary) return line
+    return (
+      <Box flexDirection="column">
+        {line}
+        <Text dimColor>  TL;DR: {summary}</Text>
+      </Box>
+    )
   })
 }
