@@ -42,7 +42,6 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 - Nothing to do. **TL;DR: long reply** in `/config` sets how long a reply must be
   (600 characters by default).
 
-
 ### previews
 
 Lets you see images Claude reads, right in the conversation.

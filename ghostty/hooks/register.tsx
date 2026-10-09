@@ -61,12 +61,18 @@ const WORKSPACES = 'claude-workspaces'
 
 const GOTO = 'claude-goto'
 
-// "<tty> <pid>" of the nearest ancestor that has a tty: Claude's own terminal and process.
+// "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
+// this shell, owns the tty too). Without one, the nearest ancestor owning a tty.
 const FIND_TTY = `p=$$
+first=
 while [ "$p" -gt 1 ]; do
   t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case "$t" in ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;; *) echo "/dev/$t $p"; exit ;; esac
-done`
+  case "$t" in ''|'?'|'??') ;; *) [ -z "$first" ] && first="/dev/$t $p"
+    c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "/dev/$t $p"; exit; } ;;
+  esac
+  p=$(ps -o ppid= -p "$p" | tr -d ' ')
+done
+echo "$first"`
 
 async function locate($: EngineInterface) {
   // HOME first: the tty search exits as soon as it finds one.

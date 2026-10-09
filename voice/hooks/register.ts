@@ -54,12 +54,18 @@ let checkin: { cancel(): void } | undefined
 let turnStartedAt = 0
 const warned = new Set<string>()
 
-// "<tty> <pid>" of the nearest ancestor owning a terminal: Claude itself. The pid gives the session its voice.
+// "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
+// this shell, owns the tty too, and changes when mods reload). Its pid keys the session's voice.
 const FIND_CLAUDE = `p=$$
+first=
 while [ "$p" -gt 1 ]; do
   t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case "$t" in ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;; *) echo "$t $p"; exit ;; esac
-done`
+  case "$t" in ''|'?'|'??') ;; *) [ -z "$first" ] && first="$t $p"
+    c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$t $p"; exit; } ;;
+  esac
+  p=$(ps -o ppid= -p "$p" | tr -d ' ')
+done
+echo "$first"`
 
 // The tty of the terminal Ghostty has focused, or nothing when Ghostty isn't the frontmost app.
 const FOCUSED_TTY = `tell application "Ghostty"
