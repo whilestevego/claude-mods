@@ -11,7 +11,7 @@ import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, with
 import type { Binding } from './keybinds'
 import { badge, nextWaiting, parseEntry, rank } from './registry'
 import type { Entry, Ranked, Status } from './registry'
-import { ask, clean } from './title'
+import { ask, bare, clean, context } from './title'
 import {
   claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, parseWorkspace, sameWorkspace, slug,
   summary as describe,
@@ -43,7 +43,6 @@ let cfg: Config
 let tty = ''
 /** Claude's own process: a session is alive while it is. */
 let pid = ''
-let prompts: string[] = []
 let summary = ''
 let titledAt = 0
 let todos: Todo[] = []
@@ -149,11 +148,34 @@ async function stopWaiting($: EngineInterface) {
   await Promise.all([drawTitle($), drawBar($)])
 }
 
-async function retitle($: EngineInterface, answer: string) {
-  const r = await $.model.complete({ model: 'haiku', prompt: ask(prompts, answer), maxTokens: 20 })
+/**
+ * A new title from the transcript (so a resumed session has its history), remembered for its conversation.
+ * `answer`: the reply that just ended, which the transcript may not hold yet. '' when there's nothing to summarize.
+ */
+async function retitle($: EngineInterface, answer?: string): Promise<string> {
+  const c = context(await $.session.messages())
+  if (c.prompts.length === 0) return ''
+  const r = await $.model.complete({ model: 'haiku', prompt: ask(c.prompts, answer ?? c.answer), maxTokens: 24 })
   const words = r.isAnswered ? clean(r.text) : ''
-  if (!words) return
+  if (!words) return ''
   summary = words
+  await drawTitle($)
+  const file = titleFile(await $.session.id())
+  if (file) await $.process.run(['mkdir', '-p', titleDir()]).then(() => $.fs.write(file, words)).catch(() => {})
+  return words
+}
+
+// Each conversation's title, so resuming it (or reopening its workspace) puts the title back.
+const titleDir = () => `${home}/Library/Caches/claude-ghostty/titles`
+const titleFile = (sessionId?: string) => (home && sessionId && /^[0-9a-f-]{8,64}$/i.test(sessionId) ? `${titleDir()}/${sessionId}` : undefined)
+
+/** The title this conversation had, or a new one when it has history but no title yet. */
+async function restoreTitle($: EngineInterface) {
+  const file = titleFile(await $.session.id())
+  const saved = file ? clean(await $.fs.read(file).catch(() => '')) : ''
+  titledAt = Date.now()
+  if (!saved) return void (await retitle($))
+  summary = saved
   await drawTitle($)
 }
 
@@ -307,6 +329,12 @@ async function loadWorkspaces($: EngineInterface): Promise<WorkspaceRow[]> {
 async function openWorkspace($: EngineInterface, file: string): Promise<string> {
   const ws = parseWorkspace(await $.fs.read(file).catch(() => ''))
   if (!ws) return "That workspace couldn't be read."
+  // Each Claude tab's saved title, for its session to pick up when it resumes; a title the session saved itself wins.
+  await $.process.run(['mkdir', '-p', titleDir()])
+  for (const p of ws.tabs.flat()) {
+    const file = p.kind === 'claude' ? titleFile(p.sessionId) : undefined
+    if (file && bare(p.title) && !(await $.fs.stat(file).then(() => true, () => false))) await $.fs.write(file, clean(bare(p.title)))
+  }
   const r = await $.process.run(['osascript', '-e', openScript(ws)])
   return r.exitCode === 0 ? `Opened "${ws.name}": ${describe(ws)}.` : `Ghostty couldn't open it: ${r.stderr.trim().slice(0, 160)}`
 }
@@ -363,6 +391,8 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await locate($)
     void setStatus($, 'idle').catch(() => {})
+    if (cfg.tabTitle) void restoreTitle($).catch(() => {})
+    await $.command.register({ name: 'title', description: 'A new 4-word tab title for this session, now' })
     await $.command.register({ name: 'keybind', description: 'Ghostty keys that type into Claude: /keybind, /keybind add <keys> <text>, /keybind remove <keys>' })
     // First start: install the default keys once (a later /keybind remove sticks, since the file then exists).
     if (cfg.keybinds && (await readBindings($).catch(() => null))?.text === null) void saveBindings($, DEFAULTS).catch(() => {})
@@ -375,6 +405,12 @@ export const register: Register = (on, options) => {
   on('session.end', async ($, e, next) => {
     if (cfg.tabProgress) await send($, progress(Progress.hide))
     return next(e)
+  })
+
+  on('command.run', { command: 'title' }, async $ => {
+    titledAt = Date.now()
+    const words = await retitle($).catch(() => '')
+    return { text: words ? `Tab title: ${words}` : 'Nothing to summarize yet: send a message first.' }
   })
 
   on('command.run', { command: 'goto' }, async ($, e) => {
@@ -501,7 +537,6 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (e.origin.kind !== 'task-notification' && e.text.trim()) prompts = [...prompts, e.text].slice(-6)
     todos = []
     hasFailed = false
     isRunning = true
@@ -544,9 +579,9 @@ export const register: Register = (on, options) => {
     isWaiting = false
     void Promise.all([drawTitle($), drawBar($), setStatus($, 'idle').catch(() => {})])
     const now = Date.now()
-    if (cfg.tabTitle && prompts.length && now - titledAt >= cfg.titleMinutes * 60_000) {
+    if (cfg.tabTitle && now - titledAt >= cfg.titleMinutes * 60_000) {
       titledAt = now
-      void retitle($, e.answer)
+      void retitle($, e.answer).catch(() => {})
     }
     return next(e)
   })

@@ -1,6 +1,7 @@
 // Workspaces: a Ghostty window's tabs of Claude sessions and shells, saved and reopened.
 
 import { safe } from './term'
+import { bare } from './title'
 
 /** A Claude tab resumes its conversation (or the folder's latest, without a known ID); a shell just opens there. */
 export type Pane = { kind: 'claude'; cwd: string; title: string; sessionId?: string } | { kind: 'shell'; cwd: string; title: string }
@@ -22,7 +23,7 @@ export function fromWindow(
   for (const line of lines.split('\n')) {
     const [tab, tty, cwd, title] = line.split('\t')
     if (!tab || !tty || cwd === undefined) continue
-    const name = safe(title ?? '')
+    const name = bare(safe(title ?? ''))
     const pid = claudePids.get(tty)
     const pane: Pane = pid
       ? { kind: 'claude', cwd, title: name, sessionId: conversations.get(pid) }

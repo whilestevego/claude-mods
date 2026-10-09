@@ -21,6 +21,8 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
     if (script.includes('ps -ax')) return out('/dev/ttys000\n/dev/ttys004\n')
     return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '')
   })
+  on('session.id', () => ({ value: 's' }) as never)
+  on('session.messages', () => ({ value: [{ role: 'user', text: 'Build the progress bar', toolUses: [] }] }) as never)
   on('config.list', () => ({ value: opts.voiceNeedsYou ? [{ key: 'voice.needsYou', value: true }] : [] }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'Tab Progress Bar', usage: {} } }) as never)
   on('command.register', () => ({ value: {} }) as never)
@@ -74,12 +76,12 @@ test('waiting on you: ❓ in the title, a paused bar and a notification', async 
   await $.prompt.submit(submit)
   await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' } as never)
   await settle()
-  expect(w).toContain('\x1b]2;❓ Claude Code\x07')
+  expect(w).toContain('\x1b]2;❓ Tab Progress Bar\x07')
   expect(w).toContain('\x1b]9;4;4\x07')
   expect(w).toContain('\x1b]777;notify;Claude Code;Claude needs your permission to use Bash\x07')
   await $.tool.call({ tool: 'Bash', command: 'ls' } as never)  // you allowed it: the tool ran
   await settle()
-  expect(w.at(-2) + w.at(-1)!).toContain('✳ Claude Code')
+  expect(w.at(-2) + w.at(-1)!).toContain('✳ Tab Progress Bar')
 })
 
 test('no notification when the voice mod says it out loud', async ($, on) => {
@@ -88,7 +90,7 @@ test('no notification when the voice mod says it out loud', async ($, on) => {
   await $.prompt.submit(submit)
   await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' } as never)
   await settle()
-  expect(w).toContain('\x1b]2;❓ Claude Code\x07')
+  expect(w).toContain('\x1b]2;❓ Tab Progress Bar\x07')
   expect(w.some(s => s.includes(']777;'))).toBe(false)
 })
 

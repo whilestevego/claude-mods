@@ -1,24 +1,30 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
+// The test environment has timers; the plugin typings just don't declare them.
+declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
 
 const start = { cwd: '/home/me/work', surface: 'terminal' as const, isInteractive: true }
 const STATUS = '/home/me/Library/Caches/claude-ghostty/sessions'
 const WS = '/home/me/.claude/workspaces'
+const TITLES = '/home/me/Library/Caches/claude-ghostty/titles'
 
 /** A fake machine: three Claude tabs in Ghostty, a disk, and a record of every AppleScript run. */
 const killed: string[] = []
 const ran: string[] = []
+const printed: string[] = []
 let stillRunning: string[] = []
 
 function machine(on: On, files: Record<string, string>) {
   const scripts: string[][] = []
   killed.length = 0
   ran.length = 0
+  printed.length = 0
   stillRunning = []
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const script = argv[2] ?? ''
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
+    if (script.includes('printf')) printed.push(argv[4]!)
     if (argv[0] === 'osascript') {
       scripts.push(argv)
       if (script.includes('repeat with t in terminals\n')) return out('A\t/dev/ttys000\t✳ Admin redesign\t/home/me/work\nB\t/dev/ttys001\t✳ Flag search\t/home/me/work\nC\t/dev/ttys004\t✳ Me\t/home/me/work\n')
@@ -43,6 +49,7 @@ function machine(on: On, files: Record<string, string>) {
   })
   on('session.id', () => ({ value: 'aaaaaaaa-1111-2222-3333-444444444444' }) as never)
   on('session.cwd', () => ({ value: '/home/me/work' }) as never)
+  on('session.messages', () => ({ value: [{ role: 'user', text: 'Redesign the admin', toolUses: [] }] }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'Brilliant Admin Work', usage: {} } }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', (_$, e) => (ran.push((e as unknown as { command: string }).command), { text: '' }))
@@ -82,9 +89,9 @@ test('/workspace save names the window with Haiku and records each conversation 
   machine(on, files)
   await $.session.start(start)
   const r = await $.command.run({ command: 'workspace', args: 'save' } as never)
-  expect(r.text).toBe('Saved workspace "Brilliant Admin Work": 2 tabs · 2 Claude. Couldn\'t find the conversation for "✳ Me": it will reopen as a new session.')
+  expect(r.text).toBe('Saved workspace "Brilliant Admin Work": 2 tabs · 2 Claude. Couldn\'t find the conversation for "Me": it will reopen as a new session.')
   const saved = JSON.parse(files[`${WS}/brilliant-admin-work.json`]!)
-  expect(saved.tabs[1][0]).toEqual({ kind: 'claude', cwd: '/home/me/work', title: '✳ Admin redesign', sessionId: 'bbbbbbbb-0000-0000-0000-000000000000' })
+  expect(saved.tabs[1][0]).toEqual({ kind: 'claude', cwd: '/home/me/work', title: 'Admin redesign', sessionId: 'bbbbbbbb-0000-0000-0000-000000000000' })
   expect(saved.tabs[1][1]).toEqual({ kind: 'shell', cwd: '/home/me/work', title: '~/work' })
   expect((await $.command.run({ command: 'workspace', args: 'save' } as never)).text).toContain('Updated')
 })
@@ -135,4 +142,24 @@ test('/workspace close leaves a session that will not exit, and says so', { opti
   await clock.advance(6000)
   expect((await pending).text).toContain("Closed 0 other Claude sessions. 1 didn't exit within 5 seconds and is still open. Exiting this session.")
   expect(scripts.some(a => a[2]?.includes('close (first terminal'))).toBe(false)
+})
+
+test('a resumed session gets its title back; /workspace open hands each tab its saved title; /title makes a new one', { options: { keybinds: false } }, async ($, on) => {
+  const me = 'aaaaaaaa-1111-2222-3333-444444444444'
+  const other = 'bbbbbbbb-0000-0000-0000-000000000000'
+  const pane = (sessionId: string, title: string) => [{ kind: 'claude', cwd: '/home/me', title, sessionId }]
+  const files: Record<string, string> = {
+    [`${TITLES}/${me}`]: 'Saved Session Title Here',
+    [`${WS}/sprint.json`]: JSON.stringify({ name: 'Sprint', savedAt: 1, tabs: [pane(me, 'Older Title'), pane(other, 'Admin redesign')] }),
+  }
+  machine(on, files)
+  await $.session.start(start)
+  await new Promise(r => setTimeout(r, 20))
+  expect(printed).toContain('\x1b]2;✳ Saved Session Title Here\x07')
+  await $.command.run({ command: 'workspace', args: 'open sprint' } as never)
+  expect(files[`${TITLES}/${other}`]).toBe('Admin redesign')               // no title of its own yet: the saved one
+  expect(files[`${TITLES}/${me}`]).toBe('Saved Session Title Here')        // its own, newer title wins
+  expect((await $.command.run({ command: 'title', args: '' } as never)).text).toBe('Tab title: Brilliant Admin Work')
+  expect(files[`${TITLES}/${me}`]).toBe('Brilliant Admin Work')
+  expect(printed.at(-1)).toBe('\x1b]2;✳ Brilliant Admin Work\x07')
 })

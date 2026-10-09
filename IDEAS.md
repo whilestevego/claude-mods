@@ -23,11 +23,11 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - `/read`, `/tldr-aloud`, `/hush`.
   - Each session gets its own voice; new speech cuts off old.
 - ✅ **ghostty**: Ghostty integration, settings all under "Ghostty" in `/config`.
-  - Tab title: a 3-word summary of the session.
+  - Tab title: a 4-word summary of the session; `/title` for a new one now; restored on resume.
   - Tab progress bar: follows the to-do list, red after a failed tool call.
   - ❓ in the tab and a notification when Claude waits on you (voice speaks it instead when on).
   - `/goto` (⌘⌃G): jump between sessions, waiting ones first; `/goto next` to the longest wait.
-  - `/workspace save`, `close`, `list`, `open`: put a window of sessions away and bring it back, every conversation resumed.
+  - `/workspace save`, `close`, `list`, `open`: put a window of sessions away and bring it back, every conversation resumed with its tab title.
   - `/keybind`: Ghostty keys that type into Claude.
 
 Related, outside this repo: **[murmur](https://github.com/whilestevego/murmur)**, the text-to-speech tool voice uses (Kokoro on the Apple Neural Engine, 28 voices, pronunciation fixes).

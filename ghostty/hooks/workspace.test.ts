@@ -15,10 +15,10 @@ test('a window becomes tabs of Claude and shell panes', () => {
   const tabs = fromWindow(lines, pids, conversations)
   expect(tabs).toEqual([
     [
-      { kind: 'claude', cwd: '/u/work/brilliant', title: '✳ Feature videos', sessionId: 'd3708272-a610-4b17-a4b4-5dc31f820798' },
+      { kind: 'claude', cwd: '/u/work/brilliant', title: 'Feature videos', sessionId: 'd3708272-a610-4b17-a4b4-5dc31f820798' },
       { kind: 'shell', cwd: '/u/work/brilliant', title: '~/work/brilliant' },
     ],
-    [{ kind: 'claude', cwd: '/u/work/brilliant', title: '✳ BRL-12583 "Admin" redesign', sessionId: undefined }],
+    [{ kind: 'claude', cwd: '/u/work/brilliant', title: 'BRL-12583 "Admin" redesign', sessionId: undefined }],
   ])
   expect(summary({ name: 'x', savedAt: 0, tabs })).toBe('2 tabs · 2 Claude')
 })

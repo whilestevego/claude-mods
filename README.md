@@ -69,7 +69,9 @@ over you while you're watching.
 Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings start with
 "Ghostty" in `/config`.
 
-- **Tab title:** a 3-word summary of what the session is about, updated as it goes.
+- **Tab title:** a 4-word summary of what the session is about, from your last 10
+  messages and Claude's latest reply, updated every few minutes as it goes. `/title` gets
+  a new one right away. A resumed session gets its old title back.
 - **Tab progress bar:** shows while Claude works, fills in as its to-do list gets done,
   and turns red when a command fails.
 - **❓ waiting on you:** a ❓ in the tab title and a desktop notification when Claude
@@ -97,7 +99,8 @@ up where it left off.
 | `/workspace open <name>` | Reopens a saved workspace in a new window. Part of the name is enough. |
 
 - **Reopening** puts each tab back in its folder. Claude tabs run `claude --resume`, so
-  they continue their own conversation. Shell tabs open at the prompt.
+  they continue their own conversation, with the tab title they had when you saved. A tab
+  saved without a title gets a new one from its conversation. Shell tabs open at the prompt.
 - **Put away a project for the day:** `/workspace close`. **Pick it up tomorrow:**
   `/workspace list`, then press its number.
 - **What doesn't come back:** programs that were running (a dev server, a test watcher),

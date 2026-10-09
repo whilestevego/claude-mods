@@ -1,12 +1,12 @@
 {
   "name": "ghostty",
   "version": "0.1.0",
-  "description": "Ghostty integration: a 3-word summary as the tab title, a tab progress bar, ❓ and a notification when Claude waits on you, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
+  "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ and a notification when Claude waits on you, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
   "userConfig": {
     "tabTitle": {
       "type": "boolean",
       "title": "Ghostty: smart tab title",
-      "description": "Set the tab title to a 3-word summary of the session (a tiny Claude Haiku call)",
+      "description": "Set the tab title to a 4-word summary of the session (a tiny Claude Haiku call)",
       "default": true
     },
     "titleMinutes": {
