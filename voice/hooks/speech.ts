@@ -42,6 +42,17 @@ export function taskLine(text: string): string {
   return status === 'failed' ? 'A background task failed.' : 'A background task finished.'
 }
 
+/**
+ * A turn an API error ended, as one line ("API Error: Connection lost mid-response. …" → "Claude hit an error:
+ * Connection lost mid-response."); empty for a turn that ended well. Claude Code writes the error as the turn's text.
+ */
+export function errorLine(reason: string, answer: string): string {
+  const said = answer.trim().match(/^API Error:\s*(.*)$/s)?.[1]
+  if (said === undefined && reason !== 'error') return ''
+  const first = said ? firstSentence(said, '') : ''
+  return first ? `Claude hit an error: ${first}` : 'Claude hit an error.'
+}
+
 export type Todo = { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm: string }
 
 /** The progress check-in: what's in progress and how far along the list is. */

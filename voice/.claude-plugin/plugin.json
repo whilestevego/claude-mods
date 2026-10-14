@@ -44,7 +44,7 @@
     "needsYou": {
       "type": "boolean",
       "title": "Needs you",
-      "description": "Say when Claude needs permission or asks a question",
+      "description": "Say when Claude needs permission, asks a question, or stops on an API error",
       "default": true
     },
     "backgroundTasks": {

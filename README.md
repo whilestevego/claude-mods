@@ -56,8 +56,9 @@ only when you're away from the session (another app or tab in front), so it neve
 over you while you're watching.
 
 - It says what a long turn did, when Claude needs your permission or has a question,
-  when a background task finishes, how a long task is going every few minutes, and when
-  you're close to a usage limit.
+  when a turn stops on an API error (like a lost connection), when a background task
+  finishes, how a long task is going every few minutes, and when you're close to a usage
+  limit.
 - `/read` reads Claude's last reply aloud.
 - `/tldr-aloud` gives a spoken 2–3 sentence summary of the session so far.
 - A soft chime plays before it speaks, so a voice never starts out of nowhere. Turn it

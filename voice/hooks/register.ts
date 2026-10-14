@@ -1,6 +1,6 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
-import { checkinLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
+import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
 import type { Todo } from './speech'
 import { claimVoice, parseTable } from './voices'
 
@@ -239,7 +239,11 @@ export const register: Register = (on, options) => {
     stopCheckins()
     lastAnswer = e.answer
     const isLong = e.durationMs >= cfg.minTurnSeconds * 1000
-    if (cfg.turnSummaries && e.reason === 'answer' && isLong && !muted) {
+    // An API error ends the turn (connection lost, the computer slept): say so, in place of a summary.
+    const error = errorLine(e.reason, e.answer)
+    if (error) {
+      if (cfg.needsYou) void say($, error)
+    } else if (cfg.turnSummaries && e.reason === 'answer' && isLong && !muted) {
       const request = lastRequest
       void summarize($, e.turnId, request, e.answer).then(line => say($, line))
     }

@@ -212,3 +212,11 @@ test('no chime when it is off', { options: { chime: false } }, async ($, on) => 
   await settle()
   expect(spoken.heard).toEqual(['speech'])
 })
+
+test('a turn an API error ended is announced in place of its summary', async ($, on) => {
+  const spoken = machine(on, { tty: '' })
+  await $.session.start(start)
+  await $.turn.complete({ ...(turn(60_000, 'API Error: Connection lost mid-response. The response above may be incomplete.') as object), reason: 'error' } as never)
+  await settle()
+  expect(spoken.map(s => s.at(-1))).toEqual(['Claude hit an error: Connection lost mid-response.'])
+})
