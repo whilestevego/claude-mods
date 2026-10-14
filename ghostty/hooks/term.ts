@@ -46,7 +46,7 @@ export function runningBar(todos: readonly Todo[], hasFailed: boolean): string {
   return pct === undefined ? progress(Progress.busy) : progress(Progress.value, pct)
 }
 
-/** Whether to post a notification when Claude waits on you: never twice, and not when the voice mod will say it. */
+/** Whether to post a notification when Claude waits on you: never twice, and not when the say mod will speak it. */
 export function shouldNotify(setting: string, voiceSpeaksIt: boolean): boolean {
   return setting === 'always' || (setting === 'auto' && !voiceSpeaksIt)
 }

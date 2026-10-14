@@ -30,7 +30,7 @@
     "waitingNotification": {
       "type": "string",
       "title": "Ghostty: notify when Claude waits on you",
-      "description": "auto: a desktop notification, unless the voice mod already says it out loud. always or never",
+      "description": "auto: a desktop notification, unless the say mod already says it out loud. always or never",
       "options": [
         "auto",
         "always",

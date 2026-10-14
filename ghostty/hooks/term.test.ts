@@ -32,7 +32,7 @@ test('the running bar follows the todo list and turns red on failure', () => {
   expect(runningBar([], true)).toBe('\x1b]9;4;2;100\x07')
 })
 
-test('notify unless the voice mod says it', () => {
+test('notify unless the say mod says it', () => {
   expect(shouldNotify('auto', false)).toBe(true)
   expect(shouldNotify('auto', true)).toBe(false)
   expect(shouldNotify('always', true)).toBe(true)

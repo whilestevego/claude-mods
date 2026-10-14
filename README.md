@@ -49,7 +49,7 @@ Lets you see images Claude reads, right in the conversation.
 - Under each image Claude opens, a line reads `🖼 name.png · hover to preview`. Point at
   it to show the picture, and move away to hide it.
 
-### voice
+### say
 
 Gives Claude a voice, through [murmur](https://github.com/whilestevego/murmur). It speaks
 only when you're away from the session (another app or tab in front), so it never talks
@@ -59,13 +59,21 @@ over you while you're watching.
   when a turn stops on an API error (like a lost connection), when a background task
   finishes, how a long task is going every few minutes, and when you're close to a usage
   limit.
-- `/read` reads Claude's last reply aloud.
-- `/tldr-aloud` gives a spoken 2–3 sentence summary of the session so far.
 - A soft chime plays before it speaks, so a voice never starts out of nowhere. Turn it
   off with **Chime** in `/config`.
-- `/hush` mutes this session; run it again to unmute.
 - Each open session gets its own voice. Pick one fixed voice, or the list sessions choose
-  from, in `/config` under **voice**.
+  from, in `/config` under **say**.
+
+Everything else is one command, `/say`:
+
+| Command | What it does |
+|---|---|
+| `/say` | Lists every voice and switches this session to the one you pick, with a quick hello in it. The choice sticks to the conversation, so resuming it keeps the voice. |
+| `/say <name>` | Switches directly, like `/say emma`. Part of the name is enough. |
+| `/say read` | Reads Claude's last reply aloud. |
+| `/say tldr` | A spoken 2–3 sentence summary of the session so far. |
+| `/say hush` | Mutes this session; run it again to unmute. |
+| `/say help` | Lists these. |
 
 ### ghostty
 
@@ -78,13 +86,13 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
 - **Tab progress bar:** shows while Claude works, fills in as its to-do list gets done,
   and turns red when a command fails.
 - **❓ waiting on you:** a ❓ in the tab title and a desktop notification when Claude
-  needs a permission or an answer. If voice is on, it speaks instead of notifying.
+  needs a permission or an answer. If say is on, it speaks instead of notifying.
 - **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
 - **`/goto`** (or ⌘⌃G) lists your open Claude sessions, the ones waiting on you first,
   and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;
   `/goto <words>` jumps to the one whose title matches.
 - **`/keybind add <keys> <text>`** makes a Ghostty key type something into Claude, like
-  `/keybind add super+ctrl+h /hush` for ⌘⌃H. `/keybind` lists them, and
+  `/keybind add super+ctrl+h /say hush` for ⌘⌃H. `/keybind` lists them, and
   `/keybind remove <keys>` removes one.
 
 #### Workspaces
@@ -118,7 +126,7 @@ up where it left off.
 
    ```json
    "env": {
-     "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-mods/context-bar:/path/to/claude-mods/voice"
+     "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/claude-mods/context-bar:/path/to/claude-mods/say"
    }
    ```
 
@@ -131,7 +139,7 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
 - **ghostty** needs Ghostty 1.3 or newer on macOS. Set
   `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` in the same `env` block, so Claude Code doesn't
   overwrite the tab title.
-- **voice** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
+- **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
 - **previews** needs a terminal that can draw images, like Ghostty or Kitty.
 - **session-id**'s pointing-hand cursor works in Ghostty, Kitty and foot.

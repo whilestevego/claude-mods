@@ -49,7 +49,7 @@ export function prettyKeys(keys: string): string {
 export function parseAdd(args: string): Binding | string {
   const [keys, ...rest] = args.trim().split(/\s+/)
   const text = rest.join(' ')
-  if (!keys || !text) return 'Usage: /keybind add <keys> <text>, e.g. /keybind add super+ctrl+h /hush'
+  if (!keys || !text) return 'Usage: /keybind add <keys> <text>, e.g. /keybind add super+ctrl+h /say hush'
   if (!/^[a-z0-9_+.,;'\[\]\/`-]+$/i.test(keys)) return `"${keys}" isn't a Ghostty key combination (like super+ctrl+g)`
   if (/[\u0000-\u001f\u007f]/.test(text)) return 'The text can\'t contain control characters'
   return { keys: keys.toLowerCase(), text }

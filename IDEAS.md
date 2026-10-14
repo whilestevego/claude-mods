@@ -15,22 +15,22 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
 - ✅ **turn-receipt**: a receipt on each turn's "Baked for…" line.
   - Tools run, files edited, tokens in and out, and the turn's cost.
 - ✅ **tldr**: a one-sentence Haiku summary under long replies.
-  - The voice mod speaks this same line, so a turn has one summary.
+  - The say mod speaks this same line, so a turn has one summary.
 - ✅ **previews**: a `🖼 … hover to preview` line under each image Claude reads.
   - Hover it to see the picture inline, keeping its shape.
-- ✅ **voice**: Claude speaks through [murmur](https://github.com/whilestevego/murmur), only when you're away.
+- ✅ **say**: Claude speaks through [murmur](https://github.com/whilestevego/murmur), only when you're away.
   - Turn summaries, needs-you alerts, background tasks done, progress check-ins, rate-limit warnings.
-  - `/read`, `/tldr-aloud`, `/hush`.
+  - `/say` picks this session's voice; `/say read`, `/say tldr`, `/say hush`.
   - Each session gets its own voice; new speech cuts off old; a soft chime plays first.
 - ✅ **ghostty**: Ghostty integration, settings all under "Ghostty" in `/config`.
   - Tab title: a 4-word summary of the session; `/title` for a new one now; restored on resume.
   - Tab progress bar: follows the to-do list, red after a failed tool call.
-  - ❓ in the tab and a notification when Claude waits on you (voice speaks it instead when on).
+  - ❓ in the tab and a notification when Claude waits on you (say speaks it instead when on).
   - `/goto` (⌘⌃G): jump between sessions, waiting ones first; `/goto next` to the longest wait.
   - `/workspace save`, `close`, `list`, `open`: put a window of sessions away and bring it back, every conversation resumed with its tab title.
   - `/keybind`: Ghostty keys that type into Claude.
 
-Related, outside this repo: **[murmur](https://github.com/whilestevego/murmur)**, the text-to-speech tool voice uses (Kokoro on the Apple Neural Engine, 28 voices, pronunciation fixes).
+Related, outside this repo: **[murmur](https://github.com/whilestevego/murmur)**, the text-to-speech tool say uses (Kokoro on the Apple Neural Engine, 28 voices, pronunciation fixes).
 
 ## Staying in flow
 

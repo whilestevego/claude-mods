@@ -25,7 +25,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
   })
   on('session.id', () => ({ value: 's' }) as never)
   on('session.messages', () => ({ value: [{ role: 'user', text: 'Build the progress bar', toolUses: [] }] }) as never)
-  on('config.list', () => ({ value: opts.voiceNeedsYou ? [{ key: 'voice.needsYou', value: true }] : [] }) as never)
+  on('config.list', () => ({ value: opts.voiceNeedsYou ? [{ key: 'say.needsYou', value: true }] : [] }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'Tab Progress Bar', usage: {} } }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', () => ({ text: '' }))
@@ -110,7 +110,7 @@ test('auto mode approving a call that asks is not waiting on you', async ($, on)
   expect(w.some(s => s.includes('❓') || s.includes(']777;'))).toBe(false)
 })
 
-test('no notification when the voice mod says it out loud', async ($, on) => {
+test('no notification when the say mod says it out loud', async ($, on) => {
   const clock = mock.clock(on)
   const w = machine(on, { voiceNeedsYou: true })
   await $.session.start(start)

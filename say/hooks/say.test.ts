@@ -18,6 +18,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     if (argv[0] === 'sh' && argv[2]?.includes('kill -0')) return out(argv.slice(4).filter(p => alive.includes(p)).join('\n'))
     if (argv[0] === 'sh') return out('ghostty\n/home/me\nttys004 4242\n')
     if (argv[0] === 'osascript') return out(focused.tty)
+    if (argv[0] === 'murmur' && argv[1] === 'voices') return out(VOICES)
     if (argv[0] === 'murmur') spoken.push(argv), heard.push('speech')
     if (argv[0] === 'afplay') heard.push(argv[1]!.endsWith('/chime.wav') ? 'chime' : argv[1]!)
     return out('')
@@ -32,6 +33,9 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     return { value: undefined } as never
   })
   on('command.register', () => ({ value: {} }) as never)
+  on('session.id', () => ({ value: 'aaaaaaaa-1111-2222-3333-444444444444' }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('ui.close', () => ({ value: {} }) as never)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('command.run', () => ({ text: '' }))
@@ -42,7 +46,15 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   return Object.assign(spoken, { heard })
 }
 
-const TABLE = '/home/me/Library/Caches/claude-voice/voices.json'
+const VOICES = `AMERICAN FEMALE
+  ✓ af_heart      Heart  default
+
+BRITISH FEMALE
+  ✓ bf_emma       Emma
+  · bf_isabella   Isabella
+`
+const CHOSEN = '/home/me/Library/Caches/claude-say/chosen/aaaaaaaa-1111-2222-3333-444444444444'
+const TABLE = '/home/me/Library/Caches/claude-say/voices.json'
 const start = { cwd: '/', surface: 'terminal' as const, isInteractive: true }
 const turn = (durationMs: number, answer: string) =>
   ({ answer, durationMs, isAborted: false, turnId: 't', reason: 'answer' }) as never
@@ -71,24 +83,24 @@ test('quiet by default: nothing is said while this terminal is focused', { optio
   expect(spoken).toHaveLength(1)
 })
 
-test('/hush mutes everything until run again', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
+test('/say hush mutes everything until run again', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
   const spoken = machine(on, { tty: '' })
   await $.session.start(start)
-  expect((await $.command.run({ command: 'hush' } as never)).text).toContain('muted')
+  expect((await $.command.run({ command: 'say', args: 'hush' } as never)).text).toContain('muted')
   await $.turn.complete(turn(60_000, 'Muted answer.'))
   await settle()
   expect(spoken.filter(a => a[1] !== 'stop')).toHaveLength(0)
-  await $.command.run({ command: 'hush' } as never)
+  await $.command.run({ command: 'say', args: 'hush' } as never)
   await $.turn.complete(turn(60_000, 'Heard answer.'))
   await settle()
   expect(spoken.at(-1)?.at(-1)).toBe('Heard answer.')
 })
 
-test('/read says the whole last answer with code omitted, even when focused', async ($, on) => {
+test('/say read says the whole last answer with code omitted, even when focused', async ($, on) => {
   const spoken = machine(on, { tty: '/dev/ttys004' })
   await $.session.start(start)
   await $.turn.complete(turn(1_000, 'Here:\n```js\nx()\n```\nThat is all.'))
-  await $.command.run({ command: 'read' } as never)
+  await $.command.run({ command: 'say', args: 'read' } as never)
   await settle()
   expect(spoken.at(-1)?.at(-1)).toBe('Here:\n Code omitted. \nThat is all.')
 })
@@ -219,4 +231,47 @@ test('a turn an API error ended is announced in place of its summary', async ($,
   await $.turn.complete({ ...(turn(60_000, 'API Error: Connection lost mid-response. The response above may be incomplete.') as object), reason: 'error' } as never)
   await settle()
   expect(spoken.map(s => s.at(-1))).toEqual(['Claude hit an error: Connection lost mid-response.'])
+})
+
+test('/say <name> switches this session voice, says hello in it, and remembers it', async ($, on) => {
+  const files: Record<string, string> = {}
+  const spoken = machine(on, { tty: '' }, files)
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'say', args: 'emma' } as never)).text).toBe('🔊 This session now speaks as Emma (bf_emma).')
+  await settle()
+  expect(spoken.at(-1)).toEqual(['murmur', '--interrupt', '--speed', '1', '--voice', 'bf_emma', '--', "Hi, I'm Emma."])
+  expect(files[CHOSEN]).toBe('bf_emma')
+  expect(JSON.parse(files[TABLE]!)['4242']).toBe('bf_emma')               // other sessions avoid it
+  expect((await $.command.run({ command: 'say', args: 'isa' } as never)).text).toMatch(/Isabella \(bf_isabella\)\. It installs on first use/)
+  expect((await $.command.run({ command: 'say', args: 'e' } as never)).text).toBe('"e" could be Heart (af_heart), Emma (bf_emma), Isabella (bf_isabella).')
+  expect((await $.command.run({ command: 'say', args: 'zed' } as never)).text).toBe('No voice or command called "zed". /say help lists them.')
+})
+
+test('a resumed conversation keeps its /say voice, even over a fixed voice', { options: { voice: 'af_heart' } }, async ($, on) => {
+  const spoken = machine(on, { tty: '' }, { [CHOSEN]: 'bf_emma' })
+  await $.session.start(start)
+  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await settle()
+  expect(spoken.at(-1)?.slice(4, 6)).toEqual(['--voice', 'bf_emma'])
+})
+
+test('/say alone lists the voices; picking one switches to it', async ($, on) => {
+  const files: Record<string, string> = { [TABLE]: JSON.stringify({ '777': 'af_heart' }) }
+  const spoken = machine(on, { tty: '' }, files, ['777'])
+  await $.session.start(start)
+  await $.command.run({ command: 'say', args: '' } as never)
+  const ui = await $.ui.mount({ plugin: 'say', surface: 'terminal', component: 'Pane', requestId: 'claude-say-picker', props: { title: 'Voices' } } as never)
+  expect((await ui.find({ key: 'voice-0' }))?.text).toMatch(/Heart .*af_heart · in use/)
+  expect(await ui.find({ type: 'Text', text: 'BRITISH FEMALE' })).toBeDefined()
+  await ui.press({ key: 'voice-1' })
+  await settle()
+  expect(spoken.at(-1)?.at(-1)).toBe("Hi, I'm Emma.")
+  expect(files[CHOSEN]).toBe('bf_emma')
+})
+
+test('/say help lists the subcommands', async ($, on) => {
+  machine(on, { tty: '' })
+  await $.session.start(start)
+  const text = (await $.command.run({ command: 'say', args: 'help' } as never)).text
+  for (const sub of ['/say <name>', '/say read', '/say tldr', '/say hush']) expect(text).toContain(sub)
 })

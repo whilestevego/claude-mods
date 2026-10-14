@@ -2,7 +2,8 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
 import type { Todo } from './speech'
-import { claimVoice, parseTable } from './voices'
+import { claimVoice, matchVoice, parseCatalog, parseTable } from './voices'
+import type { VoiceInfo } from './voices'
 
 type Config = {
   speakWhen: string
@@ -41,12 +42,18 @@ function config(o: PluginOptions): Config {
   }
 }
 
-// The module's own session state (a reload starts it over, which only forgets a /hush).
+// The module's own session state (a reload starts it over, which only forgets a /say hush).
 let cfg: Config
 let claude: { tty: string; pid: string } | null = null
 let home = ''
 /** This session's own voice, claimed at start (unused when a fixed voice is set). */
 let sessionVoice = ''
+/** The voice you picked with /say for this conversation: wins over the session's own and the fixed one. */
+let chosen = ''
+/** What the /say picker lists: murmur's voices, and the ones other sessions hold. */
+const PICKER = 'claude-say-picker'
+const currentVoice = () => chosen || cfg.voice || sessionVoice || 'af_heart'
+let picker: { voices: VoiceInfo[]; others: Set<string> } = { voices: [], others: new Set() }
 let inGhostty = false
 let muted = false
 let lastRequest = ''
@@ -113,10 +120,37 @@ async function watchForDialog($: EngineInterface, id: string, tool: string) {
   }
 }
 
+// /say's choice, kept per conversation so resuming it (or reopening its workspace) keeps the voice.
+async function chosenFile($: EngineInterface): Promise<string | undefined> {
+  const id = await $.session.id()
+  return home && /^[0-9a-f-]{8,64}$/i.test(id) ? `${home}/Library/Caches/claude-say/chosen/${id}` : undefined
+}
+
+async function choose($: EngineInterface, v: VoiceInfo): Promise<string> {
+  chosen = v.id
+  const file = await chosenFile($)
+  if (file) {
+    await $.process.run(['mkdir', '-p', file.replace(/\/[^/]*$/, '')])
+    await $.fs.write(file, v.id)
+  }
+  await claimSessionVoice($).catch(() => {})
+  void say($, `Hi, I'm ${v.name}.`, true)
+  return `🔊 This session now speaks as ${v.name} (${v.id}).` + (v.isInstalled ? '' : ' It installs on first use, so the first line may take a moment.')
+}
+
+/** The voices to pick from, and which ones other running sessions hold. */
+async function loadPicker($: EngineInterface) {
+  const r = await $.process.run(['murmur', 'voices'])
+  const table = parseTable(await $.fs.read(`${home}/Library/Caches/claude-say/voices.json`).catch(() => ''))
+  const others = new Set(Object.entries(table).filter(([pid]) => pid !== claude?.pid).map(([, v]) => v))
+  picker = { voices: parseCatalog(r.stdout), others }
+  return picker.voices
+}
+
 // Every running session shares one small table of who speaks with which voice.
 async function claimSessionVoice($: EngineInterface) {
   if (!claude || !home) return
-  const dir = `${home}/Library/Caches/claude-voice`
+  const dir = `${home}/Library/Caches/claude-say`
   const file = `${dir}/voices.json`
   const table = parseTable(await $.fs.read(file).catch(() => ''))
   const pids = Object.keys(table)
@@ -125,6 +159,7 @@ async function claimSessionVoice($: EngineInterface) {
     : []
   const claimed = claimVoice(table, claude.pid, new Set(alive), cfg.voices)
   sessionVoice = claimed.voice
+  if (chosen) claimed.table[claude.pid] = chosen
   // ponytail: last writer wins; two sessions starting in the same instant can share a voice until one restarts.
   await $.process.run(['mkdir', '-p', dir])
   await $.fs.write(file, JSON.stringify(claimed.table))
@@ -144,7 +179,7 @@ async function say($: EngineInterface, text: string, always = false) {
   // about as long to get ready as the bell rings.
   if (cfg.chime) void $.process.run(['afplay', `${$.plugin.root}/chime.wav`]).catch(() => null)
   const argv = ['murmur', '--interrupt', '--speed', String(cfg.speed)]
-  const voice = cfg.voice || sessionVoice
+  const voice = chosen || cfg.voice || sessionVoice
   if (voice) argv.push('--voice', voice)
   const r = await $.process.run([...argv, '--', text]).catch(() => null)
   if (r && r.exitCode !== 0) $.ui.toast(`murmur: ${r.stderr.trim().slice(0, 120) || 'failed'}`)
@@ -182,16 +217,62 @@ function stopCheckins() {
   checkin = undefined
 }
 
+/** /say with no subcommand: the picker, or the voice that matches. */
+async function pickVoice($: EngineInterface, query: string): Promise<{ text: string }> {
+  const voices = await loadPicker($)
+  if (voices.length === 0) return { text: "Couldn't list murmur's voices. Is murmur installed?" }
+  if (!query) {
+    await $.ui.open({ id: PICKER, title: 'Voices', focus: true, closeOnEscape: true, rows: voices.length + new Set(voices.map(v => v.group)).size + 1 })
+    return { text: `Speaking as ${voices.find(v => v.id === currentVoice())?.name ?? currentVoice()}: pick another above.` }
+  }
+  const hits = matchVoice(query, voices)
+  if (hits.length === 1) return { text: await choose($, hits[0]!) }
+  if (hits.length === 0) return { text: `No voice or command called "${query}". /say help lists them.` }
+  return { text: `"${query}" could be ${hits.map(v => `${v.name} (${v.id})`).join(', ')}.` }
+}
+
+const HELP = [
+  '/say           pick this session\'s voice from a list',
+  '/say <name>    switch to that voice (/say emma)',
+  "/say read      read Claude's last answer aloud",
+  '/say tldr      hear a 2–3 sentence summary of this session',
+  '/say hush      mute or unmute spoken updates for this session',
+].join('\n')
+
+async function hush($: EngineInterface): Promise<{ text: string }> {
+  muted = !muted
+  if (muted) await $.process.run(['murmur', 'stop']).catch(() => null)
+  return { text: muted ? '🔇 Spoken updates muted for this session. /say hush again to unmute.' : '🔊 Spoken updates back on.' }
+}
+
+async function readAloud($: EngineInterface): Promise<{ text: string }> {
+  if (!lastAnswer) return { text: 'Nothing to read yet.' }
+  if (muted) return { text: 'Muted: /say hush to unmute first.' }
+  void say($, prose(lastAnswer, 'Code omitted.'), true)
+  return { text: '🔊 Reading the last answer aloud. /say hush stops it.' }
+}
+
+async function tldrAloud($: EngineInterface): Promise<{ text: string }> {
+  if (muted) return { text: 'Muted: /say hush to unmute first.' }
+  const r = await $.model.fork({
+    prompt: 'In 2 or 3 short sentences meant to be spoken aloud, summarize this session so far: the goal, what is done, and what is next. Plain words only, no markdown or code.',
+  })
+  if (!r.isAnswered) return { text: `Couldn't summarize: ${r.reason}` }
+  const line = prose(r.text).replace(/\s+/g, ' ').trim()
+  void say($, line, true)
+  return { text: `🔊 ${line}` }
+}
+
 export const register: Register = (on, options) => {
   cfg = config(options)
   // Hooks that gate a prompt or a tool call pass it on untouched if they fail: speech must never block work.
 
   on('session.start', async ($, e, next) => {
     await locate($)
-    if (!cfg.voice) await claimSessionVoice($).catch(() => {})
-    await $.command.register({ name: 'hush', description: 'Mute or unmute spoken updates for this session' })
-    await $.command.register({ name: 'read', description: "Read Claude's last answer aloud" })
-    await $.command.register({ name: 'tldr-aloud', description: 'Hear a 2–3 sentence summary of this session' })
+    const file = await chosenFile($).catch(() => undefined)
+    chosen = file ? (await $.fs.read(file).catch(() => '')).trim() : ''
+    if (!cfg.voice || chosen) await claimSessionVoice($).catch(() => {})
+    await $.command.register({ name: 'say', description: 'Spoken updates: /say to pick a voice, /say <name>, /say read, /say tldr, /say hush, /say help' })
     return next(e)
   })
 
@@ -263,27 +344,45 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'hush' }, async $ => {
-    muted = !muted
-    if (muted) await $.process.run(['murmur', 'stop']).catch(() => null)
-    return { text: muted ? '🔇 Spoken updates muted for this session. /hush again to unmute.' : '🔊 Spoken updates back on.' }
+  on('command.run', { command: 'say' }, async ($, e) => {
+    switch (e.args.trim().toLowerCase()) {
+      case 'help': return { text: HELP }
+      case 'hush': return hush($)
+      case 'read': return readAloud($)
+      case 'tldr': return tldrAloud($)
+      default: return pickVoice($, e.args.trim())
+    }
   })
 
-  on('command.run', { command: 'read' }, async $ => {
-    if (!lastAnswer) return { text: 'Nothing to read yet.' }
-    if (muted) return { text: 'Muted: /hush to unmute first.' }
-    void say($, prose(lastAnswer, 'Code omitted.'), true)
-    return { text: '🔊 Reading the last answer aloud. /hush stops it.' }
-  })
-
-  on('command.run', { command: 'tldr-aloud' }, async $ => {
-    if (muted) return { text: 'Muted: /hush to unmute first.' }
-    const r = await $.model.fork({
-      prompt: 'In 2 or 3 short sentences meant to be spoken aloud, summarize this session so far: the goal, what is done, and what is next. Plain words only, no markdown or code.',
+  on('ui.render', { component: 'Pane', requestId: PICKER }, async ($, e) => {
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const mine = currentVoice()
+    const rows: unknown[] = []
+    let group = ''
+    picker.voices.forEach((v, i) => {
+      if (v.group !== group) {
+        group = v.group
+        rows.push(<Text bold>{group}</Text>)
+      }
+      const note = v.id === mine ? ' · this session' : picker.others.has(v.id) ? ' · in use' : ''
+      rows.push(
+        <Button
+          key={`voice-${i}`}
+          plain
+          label={`${v.isInstalled ? '✓' : '·'} ${v.name.padEnd(9)} ${v.id}${note}`}
+          autoFocus={v.id === mine ? true : undefined}
+          onPress={async () => {
+            await $.ui.close({ id: PICKER })
+            $.ui.toast(await choose($, v))
+          }}
+        />,
+      )
     })
-    if (!r.isAnswered) return { text: `Couldn't summarize: ${r.reason}` }
-    const line = prose(r.text).replace(/\s+/g, ' ').trim()
-    void say($, line, true)
-    return { text: `🔊 ${line}` }
+    return (
+      <Box flexDirection="column">
+        {rows}
+        <Text dimColor>✓ installed · Enter to speak with it · Esc to close</Text>
+      </Box>
+    )
   })
 }

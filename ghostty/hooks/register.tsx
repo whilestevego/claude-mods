@@ -130,10 +130,10 @@ async function drawBar($: EngineInterface) {
   await send($, isRunning ? runningBar(todos, hasFailed) : progress(Progress.hide))
 }
 
-/** The voice mod speaks "needs you" itself when it's loaded with that setting on. */
+/** The say mod speaks "needs you" itself when it's loaded with that setting on. */
 async function voiceSpeaksIt($: EngineInterface): Promise<boolean> {
   const rows = await $.config.list().catch(() => [])
-  return rows.some(r => r.key === 'voice.needsYou' && r.value === true)
+  return rows.some(r => r.key === 'say.needsYou' && r.value === true)
 }
 
 async function waitOnYou($: EngineInterface, why: string) {
@@ -396,7 +396,7 @@ async function saveBindings($: EngineInterface, bindings: readonly Binding[]): P
 }
 
 function listing(bindings: readonly Binding[]): string {
-  if (bindings.length === 0) return 'No Claude keybinds yet. /keybind add <keys> <text>, e.g. /keybind add super+ctrl+h /hush'
+  if (bindings.length === 0) return 'No Claude keybinds yet. /keybind add <keys> <text>, e.g. /keybind add super+ctrl+h /say hush'
   return bindings.map(b => `${prettyKeys(b.keys).padEnd(6)} ${b.text}`).join('\n')
 }
 

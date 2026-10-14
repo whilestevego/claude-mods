@@ -33,3 +33,27 @@ export function parseTable(text: string): VoiceTable {
     return {}
   }
 }
+
+/** One of murmur's voices, as `murmur voices` lists it. */
+export type VoiceInfo = { id: string; name: string; group: string; isInstalled: boolean }
+
+/** `murmur voices` output → its voices, in its order ("AMERICAN FEMALE" headers, "  ✓ af_bella  Bella" rows). */
+export function parseCatalog(text: string): VoiceInfo[] {
+  let group = ''
+  const voices: VoiceInfo[] = []
+  for (const line of text.split('\n')) {
+    const header = line.match(/^([A-Z][A-Z ]+)$/)
+    if (header) group = header[1]!.trim()
+    const row = line.match(/^\s+([✓·])\s+([a-z]{2}_[a-z]+)\s+(\S+)/)
+    if (row) voices.push({ id: row[2]!, name: row[3]!, group, isInstalled: row[1] === '✓' })
+  }
+  return voices
+}
+
+/** "emma", "bf_emma", "isa" → the voices it could mean: an exact id or name wins, else every partial match. */
+export function matchVoice(query: string, voices: readonly VoiceInfo[]): VoiceInfo[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  const exact = voices.filter(v => v.id === q || v.name.toLowerCase() === q)
+  return exact.length ? exact : voices.filter(v => v.id.includes(q) || v.name.toLowerCase().includes(q))
+}
