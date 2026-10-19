@@ -4,6 +4,8 @@ import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPro
 import type { Todo } from './speech'
 import { byGrade, claimVoice, matchVoice, parseCatalog, parseTable, weightedPick } from './voices'
 import type { VoiceInfo } from './voices'
+// tldr's state contract, for the line this mod speaks: a renamed key there fails type-checking here.
+import type {} from '../../tldr/types'
 
 type Config = {
   speakWhen: string
@@ -198,7 +200,7 @@ async function tldrLine($: EngineInterface, turnId: string): Promise<string> {
   if (!rows.some(r => r.key.startsWith('tldr.'))) return ''
   // tldr publishes after its own Haiku call (8 s at most); a short reply publishes an empty line at once.
   for (let waited = 0; waited <= 10_000; waited += 250) {
-    const held = (await $.state.get({ plugin: 'tldr', key: 'line' } as never)) as { value?: { turnId?: string; text?: string } | null }
+    const held = await $.state.get({ plugin: 'tldr', key: 'line' })
     if (held.value?.turnId === turnId) return held.value.text ?? ''
     await $.clock.sleep(250)
   }
