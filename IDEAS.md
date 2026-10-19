@@ -16,8 +16,6 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - Tools run, files edited, tokens in and out, and the turn's cost.
 - ✅ **tldr**: a one-sentence Haiku summary under long replies.
   - The say mod speaks this same line, so a turn has one summary.
-- ✅ **previews**: a `🖼 … hover to preview` line under each image Claude reads.
-  - Hover it to see the picture inline, keeping its shape.
 - ✅ **say**: Claude speaks through [murmur](https://github.com/whilestevego/murmur), only when you're away.
   - Turn summaries, needs-you alerts, background tasks done, progress check-ins, rate-limit warnings.
   - `/say` plays this session's voice; `/say pick` picks another (`/say pick random` for a surprise); `/say read`, `/say tldr`, `/say hush`.
