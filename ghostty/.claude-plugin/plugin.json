@@ -41,8 +41,8 @@
     "keybinds": {
       "type": "boolean",
       "title": "Ghostty: install Claude keybinds",
-      "description": "On first start, add ⌘⌃G for /goto to Ghostty (in its own claude-keybinds file, loaded by one line in your Ghostty config). /keybind adds your own",
-      "default": true
+      "description": "On, the next start adds ⌘⌃G for /goto to Ghostty (in its own claude-keybinds file, loaded by one line this adds to your Ghostty config). Off, Ghostty's config is only touched when you run /keybind add",
+      "default": false
     }
   },
   "types": "./types/index.d.ts"

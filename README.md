@@ -84,12 +84,15 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
 - **❓ waiting on you:** a ❓ in the tab title and a desktop notification when Claude
   needs a permission or an answer. If say is on, it speaks instead of notifying.
 - **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
-- **`/goto`** (or ⌘⌃G) lists your open Claude sessions, the ones waiting on you first,
+- **`/goto`** lists your open Claude sessions, the ones waiting on you first,
   and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;
   `/goto <words>` jumps to the one whose title matches.
 - **`/keybind add <keys> <text>`** makes a Ghostty key type something into Claude, like
   `/keybind add super+ctrl+h /say hush` for ⌘⌃H. `/keybind` lists them, and
-  `/keybind remove <keys>` removes one.
+  `/keybind remove <keys>` removes one. For ⌘⌃G to open `/goto`, run
+  `/keybind add super+ctrl+g /goto`, or turn on **Ghostty: install Claude keybinds** in `/config`.
+  The mod changes your Ghostty config only when you do one of these: it adds one line that loads
+  its own `claude-keybinds` file.
 
 #### Workspaces
 

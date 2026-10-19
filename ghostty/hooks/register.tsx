@@ -34,7 +34,7 @@ function config(o: PluginOptions): Config {
     tabProgress: o.tabProgress !== false,
     waitingBadge: o.waitingBadge !== false,
     waitingNotification: o.waitingNotification === 'always' || o.waitingNotification === 'never' ? o.waitingNotification : 'auto',
-    keybinds: o.keybinds !== false,
+    keybinds: o.keybinds === true,
   }
 }
 
