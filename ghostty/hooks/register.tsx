@@ -319,13 +319,23 @@ async function saveWorkspace($: EngineInterface, given: string): Promise<Saved> 
 
 /**
  * Saves the window, exits every other Claude session in it and closes their panes, then exits this
- * session too, leaving its tab open at the shell. Shell panes stay open.
+ * session too, leaving its tab open at the shell. Shell panes stay open. Sessions still working or waiting on
+ * you are not stopped unless `force`.
  */
-async function closeWorkspace($: EngineInterface, given: string): Promise<string> {
+async function closeWorkspace($: EngineInterface, given: string, force: boolean): Promise<string> {
   const saved = await saveWorkspace($, given)
   if (!saved.window || !saved.claudePids) return saved.text
   const targets = closable(saved.window, saved.claudePids, tty)
   if (targets.length === 0) return exitThisSession($, `${saved.text} Exiting this session.`)
+  if (!force) {
+    const entries = await readEntries($)
+    const busy = targets.filter(t => entries.get(t.tty)?.status === 'working' || entries.get(t.tty)?.status === 'waiting')
+    if (busy.length) {
+      const names = busy.map(t => `"${t.title || t.tty}"`).join(', ')
+      return `${saved.text} Closed nothing: ${names} ${busy.length === 1 ? 'is' : 'are'} still working or waiting on you. ` +
+        'Let them finish, or /workspace close --force.'
+    }
+  }
   // A polite exit, as quitting from outside does; Claude has written each conversation to disk as it went.
   await $.process.run(['kill', '-TERM', ...targets.map(t => t.pid)])
   let alive = targets
@@ -477,7 +487,7 @@ export const register: Register = (on, options) => {
     const [verb = 'list', ...rest] = e.args.trim().split(/\s+/).filter(Boolean)
     const arg = rest.join(' ')
     if (verb === 'save') return { text: (await saveWorkspace($, arg)).text }
-    if (verb === 'close') return { text: await closeWorkspace($, arg) }
+    if (verb === 'close') return { text: await closeWorkspace($, rest.filter(w => w !== '--force').join(' '), rest.includes('--force')) }
     const rows = await loadWorkspaces($)
     if (verb === 'open' && arg) {
       const hit = rows.find(r => r.name.toLowerCase() === arg.toLowerCase()) ?? rows.find(r => r.name.toLowerCase().includes(arg.toLowerCase()))

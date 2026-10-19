@@ -72,12 +72,16 @@ export function sameWorkspace<T extends Pick<Workspace, 'tabs'>>(tabs: Pane[][],
 }
 
 /** The terminals `/workspace close` exits and closes: every Claude pane but this session's own. */
-export function closable(lines: string, claudePids: ReadonlyMap<string, string>, myTty: string): Array<{ id: string; tty: string; pid: string }> {
+export function closable(
+  lines: string,
+  claudePids: ReadonlyMap<string, string>,
+  myTty: string,
+): Array<{ id: string; tty: string; pid: string; title: string }> {
   return lines
     .split('\n')
     .map(l => l.split('\t'))
     .filter(f => f.length >= 5 && f[1] !== myTty && claudePids.has(f[1]!))
-    .map(f => ({ id: f[4]!, tty: f[1]!, pid: claudePids.get(f[1]!)! }))
+    .map(f => ({ id: f[4]!, tty: f[1]!, pid: claudePids.get(f[1]!)!, title: bare(safe(f[3]!)) }))
 }
 
 /** "Brilliant Admin Work" → "brilliant-admin-work": the file name. */

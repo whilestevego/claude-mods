@@ -163,3 +163,24 @@ test('a resumed session gets its title back; /workspace open hands each tab its 
   expect(files[`${TITLES}/${me}`]).toBe('Brilliant Admin Work')
   expect(printed.at(-1)).toBe('set_surface_title:✳ Brilliant Admin Work')
 })
+
+test('/workspace close stops nothing while another session is busy, unless --force', { options: { keybinds: false } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const files: Record<string, string> = {
+    '/home/me/.claude/sessions/100.json': JSON.stringify({ sessionId: 'bbbbbbbb-0000-0000-0000-000000000000' }),
+    [`${STATUS}/_dev_ttys000.json`]: entry('/dev/ttys000', 'working', 1000),
+  }
+  machine(on, files)
+  await $.session.start(start)
+  const refused = $.command.run({ command: 'workspace', args: 'close Sprint' } as never)
+  await clock.advance(500)
+  expect((await refused).text).toContain('Closed nothing: "Admin redesign" is still working or waiting on you.')
+  expect(killed).toEqual([])
+  expect(ran).not.toContain('exit')
+  expect(files[`${WS}/sprint.json`]).toBeDefined()                  // saved all the same
+  const forced = $.command.run({ command: 'workspace', args: 'close --force Sprint' } as never)
+  await clock.advance(500)
+  expect((await forced).text).toContain('Closed 1 other Claude session.')
+  expect(killed).toEqual(['-TERM', '100'])
+  expect(JSON.parse(files[`${WS}/sprint.json`]!).name).toBe('Sprint')
+})
