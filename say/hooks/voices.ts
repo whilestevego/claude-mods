@@ -1,11 +1,5 @@
 // One voice per running Claude session, claimed from a small table every session shares.
 
-/** Voices handed to sessions in turn: alternating accents and genders so neighbours sound distinct. */
-export const SESSION_VOICES = [
-  'af_heart', 'bm_george', 'af_nicole', 'am_michael', 'bf_emma', 'am_fenrir',
-  'bf_isabella', 'bm_fable', 'af_bella', 'am_santa', 'bf_lily', 'bm_lewis',
-]
-
 /** Session (process id) → voice. */
 export type VoiceTable = Record<string, string>
 
@@ -17,7 +11,7 @@ export function claimVoice(table: VoiceTable, me: string, alive: ReadonlySet<str
   const live: VoiceTable = Object.fromEntries(Object.entries(table).filter(([pid]) => pid === me || alive.has(pid)))
   const held = live[me]
   if (held) return { voice: held, table: live }
-  const choices = pool.length ? pool : SESSION_VOICES
+  const choices = pool.length ? pool : ['af_heart']
   const taken = new Set(Object.values(live))
   const voice = choices.find(v => !taken.has(v)) ?? choices[Object.keys(live).length % choices.length]!
   return { voice, table: { ...live, [me]: voice } }
@@ -34,18 +28,18 @@ export function parseTable(text: string): VoiceTable {
   }
 }
 
-/** One of murmur's voices, as `murmur voices` lists it. */
-export type VoiceInfo = { id: string; name: string; group: string; isInstalled: boolean }
+/** One of murmur's voices, as `murmur voices` lists it; `grade` is Kokoro's (A to F), '' from a murmur without grades. */
+export type VoiceInfo = { id: string; name: string; group: string; isInstalled: boolean; grade: string }
 
-/** `murmur voices` output → its voices, in its order ("AMERICAN FEMALE" headers, "  ✓ af_bella  Bella" rows). */
+/** `murmur voices` output → its voices, in its order ("AMERICAN FEMALE" headers, "  ✓ af_bella  Bella  A-" rows). */
 export function parseCatalog(text: string): VoiceInfo[] {
   let group = ''
   const voices: VoiceInfo[] = []
   for (const line of text.split('\n')) {
     const header = line.match(/^([A-Z][A-Z ]+)$/)
     if (header) group = header[1]!.trim()
-    const row = line.match(/^\s+([✓·])\s+([a-z]{2}_[a-z]+)\s+(\S+)/)
-    if (row) voices.push({ id: row[2]!, name: row[3]!, group, isInstalled: row[1] === '✓' })
+    const row = line.match(/^\s+([✓·])\s+([a-z]{2}_[a-z]+)\s+(\S+)(?:\s+([A-F][+-]?)(?=\s|$))?/)
+    if (row) voices.push({ id: row[2]!, name: row[3]!, group, isInstalled: row[1] === '✓', grade: row[4] ?? '' })
   }
   return voices
 }
@@ -56,4 +50,23 @@ export function matchVoice(query: string, voices: readonly VoiceInfo[]): VoiceIn
   if (!q) return []
   const exact = voices.filter(v => v.id === q || v.name.toLowerCase() === q)
   return exact.length ? exact : voices.filter(v => v.id.includes(q) || v.name.toLowerCase().includes(q))
+}
+
+/** A grade as a number: A 4, B 3, C 2, D 1, F 0, a + or − worth 0.3; no grade counts as a C. */
+export function gradePoints(grade: string): number {
+  const m = grade.match(/^([A-DF])([+-]?)$/)
+  if (!m) return 2
+  return 'FDCBA'.indexOf(m[1]!) + (m[2] === '+' ? 0.3 : m[2] === '-' ? -0.3 : 0)
+}
+
+/** Voice ids, best grade first; equal grades keep murmur's order. */
+export function byGrade(voices: readonly VoiceInfo[]): string[] {
+  return [...voices].sort((a, b) => gradePoints(b.grade) - gradePoints(a.grade)).map(v => v.id)
+}
+
+/** A random voice, weighted by the square of its grade: an A comes up 16 times as often as a D. */
+export function weightedPick(voices: readonly VoiceInfo[], random = Math.random): VoiceInfo | undefined {
+  const weights = voices.map(v => Math.max(gradePoints(v.grade), 0.1) ** 2)
+  let r = random() * weights.reduce((a, b) => a + b, 0)
+  return voices.find((_, i) => (r -= weights[i]!) < 0) ?? voices.at(-1)
 }

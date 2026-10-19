@@ -92,7 +92,7 @@
     "voices": {
       "type": "string",
       "title": "Session voices",
-      "description": "Comma-separated voices handed to sessions in order. Empty: murmur's default mix",
+      "description": "Comma-separated voices handed to sessions in order. Empty: the best-graded voice no other session has",
       "default": ""
     }
   }

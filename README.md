@@ -61,17 +61,18 @@ over you while you're watching.
   limit.
 - A soft chime plays before it speaks, so a voice never starts out of nowhere. Turn it
   off with **Chime** in `/config`.
-- Each open session gets its own voice. Pick one fixed voice, or the list sessions choose
-  from, in `/config` under **say**.
+- Each open session gets its own voice: the best one no other session has, by Kokoro's
+  grades (Heart, then Bella, Nicole, Emma…). Pick one fixed voice, or your own list, in
+  `/config` under **say**.
 
 Everything else is one command, `/say`:
 
 | Command | What it does |
 |---|---|
 | `/say` | Names this session's voice and plays a short sample of it. |
-| `/say pick` | Lists every voice and switches this session to the one you pick, with a sample in it. The choice sticks to the conversation, so resuming it keeps the voice. |
+| `/say pick` | Lists every voice with its grade and switches this session to the one you pick, with a sample in it. The choice sticks to the conversation, so resuming it keeps the voice. |
 | `/say pick <name>` | Switches directly, like `/say pick emma`. Part of the name is enough. |
-| `/say pick random` | Switches to a random voice, other than the current one. |
+| `/say pick random` | Switches to a random voice, other than the current one. Better-graded voices come up more often. |
 | `/say read` | Reads Claude's last reply aloud. |
 | `/say tldr` | A spoken 2–3 sentence summary of the session so far. |
 | `/say hush` | Mutes this session; run it again to unmute. |

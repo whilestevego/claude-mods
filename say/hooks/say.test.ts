@@ -47,11 +47,11 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
 }
 
 const VOICES = `AMERICAN FEMALE
-  ✓ af_heart      Heart  default
+  ✓ af_heart      Heart     A   default
 
 BRITISH FEMALE
-  ✓ bf_emma       Emma
-  · bf_isabella   Isabella
+  ✓ bf_emma       Emma      B-
+  · bf_isabella   Isabella  C
 `
 const CHOSEN = '/home/me/Library/Caches/claude-say/chosen/aaaaaaaa-1111-2222-3333-444444444444'
 const TABLE = '/home/me/Library/Caches/claude-say/voices.json'
@@ -131,14 +131,14 @@ test('a fixed voice wins over the session voice, and claims nothing', { options:
   expect(files[TABLE]).toBeUndefined()
 })
 
-test('a second live session gets the next voice; a dead one gives its voice back', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
+test('a second live session gets the best-graded free voice; a dead one gives its voice back', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
   const files: Record<string, string> = { [TABLE]: JSON.stringify({ 1111: 'af_heart', 2222: 'bm_george' }) }
   const spoken = machine(on, { tty: '' }, files, ['1111'])  // 2222 has exited
   await $.session.start(start)
   await $.turn.complete(turn(60_000, 'Hello.'))
   await settle()
-  expect(spoken[0]).toContain('bm_george')
-  expect(JSON.parse(files[TABLE]!)).toEqual({ 1111: 'af_heart', 4242: 'bm_george' })
+  expect(spoken[0]).toContain('bf_emma')
+  expect(JSON.parse(files[TABLE]!)).toEqual({ 1111: 'af_heart', 4242: 'bf_emma' })
 })
 
 test('the session voice comes from the configured list', { options: { voices: 'bm_lewis, af_sky', summaryStyle: 'first-sentence' } }, async ($, on) => {
@@ -269,7 +269,7 @@ test('/say pick lists the voices; picking one switches to it', async ($, on) => 
   await $.session.start(start)
   await $.command.run({ command: 'say', args: 'pick' } as never)
   const ui = await $.ui.mount({ plugin: 'say', surface: 'terminal', component: 'Pane', requestId: 'claude-say-picker', props: { title: 'Voices' } } as never)
-  expect((await ui.find({ key: 'voice-0' }))?.text).toMatch(/Heart .*af_heart · in use/)
+  expect((await ui.find({ key: 'voice-0' }))?.text).toMatch(/Heart +af_heart +A +· in use/)
   expect(await ui.find({ type: 'Text', text: 'BRITISH FEMALE' })).toBeDefined()
   await ui.press({ key: 'voice-1' })
   await settle()

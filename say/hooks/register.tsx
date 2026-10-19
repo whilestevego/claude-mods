@@ -2,7 +2,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
 import type { Todo } from './speech'
-import { claimVoice, matchVoice, parseCatalog, parseTable } from './voices'
+import { byGrade, claimVoice, matchVoice, parseCatalog, parseTable, weightedPick } from './voices'
 import type { VoiceInfo } from './voices'
 
 type Config = {
@@ -140,7 +140,7 @@ async function choose($: EngineInterface, v: VoiceInfo): Promise<string> {
 
 /** The voices to pick from, and which ones other running sessions hold. */
 async function loadPicker($: EngineInterface) {
-  const r = await $.process.run(['murmur', 'voices'])
+  const r = await $.process.run(['murmur', 'voices']).catch(() => ({ stdout: '' }))
   const table = parseTable(await $.fs.read(`${home}/Library/Caches/claude-say/voices.json`).catch(() => ''))
   const others = new Set(Object.entries(table).filter(([pid]) => pid !== claude?.pid).map(([, v]) => v))
   picker = { voices: parseCatalog(r.stdout), others }
@@ -157,7 +157,9 @@ async function claimSessionVoice($: EngineInterface) {
   const alive = pids.length
     ? (await $.process.run(['sh', '-c', 'for p; do kill -0 "$p" 2>/dev/null && echo "$p"; done', 'sh', ...pids])).stdout.split('\n')
     : []
-  const claimed = claimVoice(table, claude.pid, new Set(alive), cfg.voices)
+  // Unless you listed voices yourself, sessions take the best-graded voice no other session holds.
+  const pool = cfg.voices.length ? cfg.voices : byGrade(await loadPicker($))
+  const claimed = claimVoice(table, claude.pid, new Set(alive), pool)
   sessionVoice = claimed.voice
   if (chosen) claimed.table[claude.pid] = chosen
   // ponytail: last writer wins; two sessions starting in the same instant can share a voice until one restarts.
@@ -235,7 +237,7 @@ async function pickVoice($: EngineInterface, query: string): Promise<{ text: str
   const name = rest.join(' ')
   if (name.toLowerCase() === 'random') {
     const others = voices.filter(v => v.id !== currentVoice())
-    return { text: await choose($, others[Math.floor(Math.random() * others.length)] ?? voices[0]!) }
+    return { text: await choose($, weightedPick(others) ?? voices[0]!) }
   }
   if (!name) {
     await $.ui.open({ id: PICKER, title: 'Voices', focus: true, closeOnEscape: true, rows: voices.length + new Set(voices.map(v => v.group)).size + 1 })
@@ -387,7 +389,7 @@ export const register: Register = (on, options) => {
         <Button
           key={`voice-${i}`}
           plain
-          label={`${v.isInstalled ? '✓' : '·'} ${v.name.padEnd(9)} ${v.id}${note}`}
+          label={`${v.isInstalled ? '✓' : '·'} ${v.name.padEnd(9)} ${v.id.padEnd(12)} ${v.grade.padEnd(2)}${note}`}
           autoFocus={v.id === mine ? true : undefined}
           onPress={async () => {
             await $.ui.close({ id: PICKER })
@@ -399,7 +401,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {rows}
-        <Text dimColor>✓ installed · Enter to speak with it · Esc to close</Text>
+        <Text dimColor>✓ installed · A–F: Kokoro's grade · Enter to speak with it · Esc to close</Text>
       </Box>
     )
   })
