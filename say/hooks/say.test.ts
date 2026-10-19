@@ -233,18 +233,18 @@ test('a turn an API error ended is announced in place of its summary', async ($,
   expect(spoken.map(s => s.at(-1))).toEqual(['Claude hit an error: Connection lost mid-response.'])
 })
 
-test('/say <name> switches this session voice, says hello in it, and remembers it', async ($, on) => {
+test('/say pick <name> switches this session voice, says hello in it, and remembers it', async ($, on) => {
   const files: Record<string, string> = {}
   const spoken = machine(on, { tty: '' }, files)
   await $.session.start(start)
-  expect((await $.command.run({ command: 'say', args: 'emma' } as never)).text).toBe('🔊 This session now speaks as Emma (bf_emma).')
+  expect((await $.command.run({ command: 'say', args: 'pick emma' } as never)).text).toBe('🔊 This session now speaks as Emma (bf_emma).')
   await settle()
-  expect(spoken.at(-1)).toEqual(['murmur', '--interrupt', '--speed', '1', '--voice', 'bf_emma', '--', "Hi, I'm Emma."])
+  expect(spoken.at(-1)).toEqual(['murmur', '--interrupt', '--speed', '1', '--voice', 'bf_emma', '--', "Hi, I'm Emma. This is how I sound."])
   expect(files[CHOSEN]).toBe('bf_emma')
   expect(JSON.parse(files[TABLE]!)['4242']).toBe('bf_emma')               // other sessions avoid it
-  expect((await $.command.run({ command: 'say', args: 'isa' } as never)).text).toMatch(/Isabella \(bf_isabella\)\. It installs on first use/)
-  expect((await $.command.run({ command: 'say', args: 'e' } as never)).text).toBe('"e" could be Heart (af_heart), Emma (bf_emma), Isabella (bf_isabella).')
-  expect((await $.command.run({ command: 'say', args: 'zed' } as never)).text).toBe('No voice or command called "zed". /say help lists them.')
+  expect((await $.command.run({ command: 'say', args: 'pick isa' } as never)).text).toMatch(/Isabella \(bf_isabella\)\. It installs on first use/)
+  expect((await $.command.run({ command: 'say', args: 'pick e' } as never)).text).toBe('"e" could be Heart (af_heart), Emma (bf_emma), Isabella (bf_isabella).')
+  expect((await $.command.run({ command: 'say', args: 'pick zed' } as never)).text).toBe('No voice called "zed". /say pick lists them.')
 })
 
 test('a resumed conversation keeps its /say voice, even over a fixed voice', { options: { voice: 'af_heart' } }, async ($, on) => {
@@ -255,17 +255,25 @@ test('a resumed conversation keeps its /say voice, even over a fixed voice', { o
   expect(spoken.at(-1)?.slice(4, 6)).toEqual(['--voice', 'bf_emma'])
 })
 
-test('/say alone lists the voices; picking one switches to it', async ($, on) => {
+test('/say alone names this session voice and plays a sample of it', async ($, on) => {
+  const spoken = machine(on, { tty: '' })
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'say', args: '' } as never)).text).toBe('🔊 This session speaks as Heart (af_heart). /say pick for another.')
+  await settle()
+  expect(spoken.at(-1)?.at(-1)).toBe("Hi, I'm Heart. This is how I sound.")
+})
+
+test('/say pick lists the voices; picking one switches to it', async ($, on) => {
   const files: Record<string, string> = { [TABLE]: JSON.stringify({ '777': 'af_heart' }) }
   const spoken = machine(on, { tty: '' }, files, ['777'])
   await $.session.start(start)
-  await $.command.run({ command: 'say', args: '' } as never)
+  await $.command.run({ command: 'say', args: 'pick' } as never)
   const ui = await $.ui.mount({ plugin: 'say', surface: 'terminal', component: 'Pane', requestId: 'claude-say-picker', props: { title: 'Voices' } } as never)
   expect((await ui.find({ key: 'voice-0' }))?.text).toMatch(/Heart .*af_heart · in use/)
   expect(await ui.find({ type: 'Text', text: 'BRITISH FEMALE' })).toBeDefined()
   await ui.press({ key: 'voice-1' })
   await settle()
-  expect(spoken.at(-1)?.at(-1)).toBe("Hi, I'm Emma.")
+  expect(spoken.at(-1)?.at(-1)).toBe("Hi, I'm Emma. This is how I sound.")
   expect(files[CHOSEN]).toBe('bf_emma')
 })
 
@@ -273,5 +281,22 @@ test('/say help lists the subcommands', async ($, on) => {
   machine(on, { tty: '' })
   await $.session.start(start)
   const text = (await $.command.run({ command: 'say', args: 'help' } as never)).text
-  for (const sub of ['/say <name>', '/say read', '/say tldr', '/say hush']) expect(text).toContain(sub)
+  for (const sub of ['/say pick random', '/say pick <name>', '/say read', '/say tldr', '/say hush']) expect(text).toContain(sub)
+})
+
+test('/say pick random switches to another voice', async ($, on) => {
+  const files: Record<string, string> = {}
+  machine(on, { tty: '' }, files)
+  await $.session.start(start)
+  for (let i = 0; i < 5; i++) {
+    const before = files[CHOSEN] ?? 'af_heart'
+    expect((await $.command.run({ command: 'say', args: 'pick random' } as never)).text).toMatch(/^🔊 This session now speaks as /)
+    expect(files[CHOSEN]).not.toBe(before)
+  }
+})
+
+test('/say with an unknown word points to /say help', async ($, on) => {
+  machine(on, { tty: '' })
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'say', args: 'emma' } as never)).text).toBe('No /say command called "emma". /say help lists them.')
 })

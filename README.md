@@ -68,8 +68,10 @@ Everything else is one command, `/say`:
 
 | Command | What it does |
 |---|---|
-| `/say` | Lists every voice and switches this session to the one you pick, with a quick hello in it. The choice sticks to the conversation, so resuming it keeps the voice. |
-| `/say <name>` | Switches directly, like `/say emma`. Part of the name is enough. |
+| `/say` | Names this session's voice and plays a short sample of it. |
+| `/say pick` | Lists every voice and switches this session to the one you pick, with a sample in it. The choice sticks to the conversation, so resuming it keeps the voice. |
+| `/say pick <name>` | Switches directly, like `/say pick emma`. Part of the name is enough. |
+| `/say pick random` | Switches to a random voice, other than the current one. |
 | `/say read` | Reads Claude's last reply aloud. |
 | `/say tldr` | A spoken 2–3 sentence summary of the session so far. |
 | `/say hush` | Mutes this session; run it again to unmute. |

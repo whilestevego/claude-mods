@@ -20,7 +20,7 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - Hover it to see the picture inline, keeping its shape.
 - ✅ **say**: Claude speaks through [murmur](https://github.com/whilestevego/murmur), only when you're away.
   - Turn summaries, needs-you alerts, background tasks done, progress check-ins, rate-limit warnings.
-  - `/say` picks this session's voice; `/say read`, `/say tldr`, `/say hush`.
+  - `/say` plays this session's voice; `/say pick` picks another (`/say pick random` for a surprise); `/say read`, `/say tldr`, `/say hush`.
   - Each session gets its own voice; new speech cuts off old; a soft chime plays first.
 - ✅ **ghostty**: Ghostty integration, settings all under "Ghostty" in `/config`.
   - Tab title: a 4-word summary of the session; `/title` for a new one now; restored on resume.

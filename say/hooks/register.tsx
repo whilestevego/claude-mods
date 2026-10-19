@@ -134,7 +134,7 @@ async function choose($: EngineInterface, v: VoiceInfo): Promise<string> {
     await $.fs.write(file, v.id)
   }
   await claimSessionVoice($).catch(() => {})
-  void say($, `Hi, I'm ${v.name}.`, true)
+  void say($, sample(v.name), true)
   return `🔊 This session now speaks as ${v.name} (${v.id}).` + (v.isInstalled ? '' : ' It installs on first use, so the first line may take a moment.')
 }
 
@@ -217,26 +217,44 @@ function stopCheckins() {
   checkin = undefined
 }
 
-/** /say with no subcommand: the picker, or the voice that matches. */
+/** What a voice says to show how it sounds. */
+const sample = (name: string) => `Hi, I'm ${name}. This is how I sound.`
+
+/** /say alone: this session's voice and a sample of it. /say pick: the picker, a random voice, or the one named. */
 async function pickVoice($: EngineInterface, query: string): Promise<{ text: string }> {
   const voices = await loadPicker($)
   if (voices.length === 0) return { text: "Couldn't list murmur's voices. Is murmur installed?" }
   if (!query) {
+    const name = voices.find(v => v.id === currentVoice())?.name ?? currentVoice()
+    if (muted) return { text: `🔊 This session speaks as ${name} (${currentVoice()}), muted. /say pick for another.` }
+    void say($, sample(name), true)
+    return { text: `🔊 This session speaks as ${name} (${currentVoice()}). /say pick for another.` }
+  }
+  const [word = '', ...rest] = query.split(/\s+/)
+  if (word.toLowerCase() !== 'pick') return { text: `No /say command called "${word}". /say help lists them.` }
+  const name = rest.join(' ')
+  if (name.toLowerCase() === 'random') {
+    const others = voices.filter(v => v.id !== currentVoice())
+    return { text: await choose($, others[Math.floor(Math.random() * others.length)] ?? voices[0]!) }
+  }
+  if (!name) {
     await $.ui.open({ id: PICKER, title: 'Voices', focus: true, closeOnEscape: true, rows: voices.length + new Set(voices.map(v => v.group)).size + 1 })
     return { text: `Speaking as ${voices.find(v => v.id === currentVoice())?.name ?? currentVoice()}: pick another above.` }
   }
-  const hits = matchVoice(query, voices)
+  const hits = matchVoice(name, voices)
   if (hits.length === 1) return { text: await choose($, hits[0]!) }
-  if (hits.length === 0) return { text: `No voice or command called "${query}". /say help lists them.` }
-  return { text: `"${query}" could be ${hits.map(v => `${v.name} (${v.id})`).join(', ')}.` }
+  if (hits.length === 0) return { text: `No voice called "${name}". /say pick lists them.` }
+  return { text: `"${name}" could be ${hits.map(v => `${v.name} (${v.id})`).join(', ')}.` }
 }
 
 const HELP = [
-  '/say           pick this session\'s voice from a list',
-  '/say <name>    switch to that voice (/say emma)',
-  "/say read      read Claude's last answer aloud",
-  '/say tldr      hear a 2–3 sentence summary of this session',
-  '/say hush      mute or unmute spoken updates for this session',
+  "/say              hear this session's voice",
+  '/say pick         pick another voice from a list',
+  '/say pick <name>  switch to that voice (/say pick emma)',
+  '/say pick random  switch to a random voice',
+  "/say read         read Claude's last answer aloud",
+  '/say tldr         hear a 2–3 sentence summary of this session',
+  '/say hush         mute or unmute spoken updates for this session',
 ].join('\n')
 
 async function hush($: EngineInterface): Promise<{ text: string }> {
@@ -272,7 +290,7 @@ export const register: Register = (on, options) => {
     const file = await chosenFile($).catch(() => undefined)
     chosen = file ? (await $.fs.read(file).catch(() => '')).trim() : ''
     if (!cfg.voice || chosen) await claimSessionVoice($).catch(() => {})
-    await $.command.register({ name: 'say', description: 'Spoken updates: /say to pick a voice, /say <name>, /say read, /say tldr, /say hush, /say help' })
+    await $.command.register({ name: 'say', description: "Spoken updates: /say to hear this session's voice, /say pick [<name>|random], /say read, /say tldr, /say hush, /say help" })
     return next(e)
   })
 
