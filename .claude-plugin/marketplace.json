@@ -1,0 +1,45 @@
+{
+  "name": "claude-mods",
+  "description": "Mods for Claude Code: small plugins that add to its screen and behavior",
+  "owner": {
+    "name": "Steve Godin",
+    "url": "https://github.com/whilestevego"
+  },
+  "plugins": [
+    {
+      "name": "context-bar",
+      "source": "./context-bar",
+      "description": "Context window as a stacked bar above the prompt, toggled with /context-bar"
+    },
+    {
+      "name": "ghostty",
+      "source": "./ghostty",
+      "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ and a notification when Claude waits on you, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude"
+    },
+    {
+      "name": "rate-limits",
+      "source": "./rate-limits",
+      "description": "5-hour and weekly rate-limit gauges above the prompt, with a warning at 90%"
+    },
+    {
+      "name": "say",
+      "source": "./say",
+      "description": "Claude Code speaks through murmur (Kokoro on the Apple Neural Engine): turn summaries, needs-you alerts, background tasks, progress check-ins and rate-limit warnings, each session in its own voice (/say picks one)"
+    },
+    {
+      "name": "session-id",
+      "source": "./session-id",
+      "description": "Shows the session id in the prompt footer; click to copy"
+    },
+    {
+      "name": "tldr",
+      "source": "./tldr",
+      "description": "A one-line TL;DR under Claude's long replies, written by Claude Haiku; the say mod speaks the same line"
+    },
+    {
+      "name": "turn-receipt",
+      "source": "./turn-receipt",
+      "description": "A receipt row above the prompt after each turn: time, tools, files edited, cost"
+    }
+  ]
+}

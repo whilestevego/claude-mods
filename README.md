@@ -119,6 +119,17 @@ up where it left off.
 
 ## Setup
 
+Install the mods you want, one line each, at the prompt of a Claude Code session:
+
+```
+/plugin install context-bar --marketplace whilestevego/claude-mods
+```
+
+Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`,
+`rate-limits`, `session-id`, `turn-receipt`, `tldr`, `say` and `ghostty`.
+
+### From a clone, while working on them
+
 1. Clone this repo.
 2. List the mods you want in `CLAUDE_CODE_PLUGIN_DIRS`, separated by `:`, in the `env`
    block of `~/.claude/settings.json`:
