@@ -1,6 +1,6 @@
 {
   "name": "tldr",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A one-line TL;DR under Claude's long replies, written by Claude Haiku; the say mod speaks the same line",
   "author": {
     "name": "Steve Godin",
