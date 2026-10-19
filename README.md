@@ -42,13 +42,6 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 - Nothing to do. **TL;DR: long reply** in `/config` sets how long a reply must be
   (600 characters by default).
 
-### previews
-
-Lets you see images Claude reads, right in the conversation.
-
-- Under each image Claude opens, a line reads `🖼 name.png · hover to preview`. Point at
-  it to show the picture, and move away to hide it.
-
 ### say
 
 Gives Claude a voice, through [murmur](https://github.com/whilestevego/murmur). It speaks
@@ -144,7 +137,6 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
   overwrite the tab title.
 - **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
-- **previews** needs a terminal that can draw images, like Ghostty or Kitty.
 - **session-id**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 
 The first time a mod controls Ghostty, macOS asks for permission. Allow it.
