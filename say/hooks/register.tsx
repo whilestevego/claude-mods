@@ -72,7 +72,7 @@ let turnStartedAt = 0
 const asking = new Set<string>()
 
 // "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
-// this shell, owns the tty too, and changes when mods reload). Its pid keys the session's voice.
+// this shell, owns the tty too, and changes when mods reload). Its pid keys the session's voice. No API names either.
 const FIND_CLAUDE = `p=$$
 first=
 while [ "$p" -gt 1 ]; do
@@ -91,11 +91,9 @@ const FOCUSED_TTY = `tell application "Ghostty"
 end tell`
 
 async function locate($: EngineInterface) {
-  // The environment first: the Claude search exits as soon as it finds it.
-  const found = (await $.process.run(['sh', '-c', `echo "$TERM_PROGRAM"\necho "$HOME"\n${FIND_CLAUDE}`])).stdout.trim().split('\n')
-  inGhostty = (found[0] ?? '').toLowerCase() === 'ghostty'
-  home = found[1] ?? ''
-  const [tty, pid] = (found[2] ?? '').split(' ')
+  inGhostty = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() === 'ghostty'
+  home = (await $.env.get('HOME')) ?? ''
+  const [tty, pid] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(' ')
   claude = tty && pid ? { tty, pid } : null
 }
 

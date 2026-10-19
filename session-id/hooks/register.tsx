@@ -1,13 +1,18 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 // OSC 22 sets the mouse pointer's shape (Ghostty, Kitty, foot; other terminals ignore it).
-// A mod can't print to the screen, so write it straight to the tty of the nearest ancestor that has one.
-const SET_POINTER = `p=$$
+// A mod can't print to the screen, so it's written straight to the tty of the nearest ancestor that has one,
+// found once: the walk up the process tree costs a few `ps` runs.
+const FIND_TTY = `p=$$
 while [ "$p" -gt 1 ]; do
   t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case "$t" in ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;; *) printf '\\033]22;%s\\033\\\\' "$1" > "/dev/$t"; exit ;; esac
+  case "$t" in ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;; *) echo "/dev/$t"; exit ;; esac
 done`
+const SET_POINTER = `printf '\\033]22;%s\\033\\\\' "$1" > "$2"`
+
+let tty: Promise<string> | undefined
+const ttyOf = ($: EngineInterface) => (tty ??= $.process.run(['sh', '-c', FIND_TTY]).then(r => r.stdout.trim()))
 
 let wantedPointer = 'default'
 let sentPointer = 'default'
@@ -39,7 +44,8 @@ export const register: Register = on => {
       await $.clock.sleep(100)
       if (wantedPointer !== sentPointer) {
         sentPointer = wantedPointer
-        await $.process.run(['sh', '-c', SET_POINTER, 'sh', sentPointer])
+        const to = await ttyOf($)
+        if (to) await $.process.run(['sh', '-c', SET_POINTER, 'sh', sentPointer, to])
       }
       return next(e)
     }

@@ -16,7 +16,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
     if (argv[0] === 'sh' && argv[2]?.includes('kill -0')) return out(argv.slice(4).filter(p => alive.includes(p)).join('\n'))
-    if (argv[0] === 'sh') return out('ghostty\n/home/me\nttys004 4242\n')
+    if (argv[0] === 'sh') return out('ttys004 4242\n')
     if (argv[0] === 'osascript') return out(focused.tty)
     if (argv[0] === 'murmur' && argv[1] === 'voices') return out(VOICES)
     if (argv[0] === 'murmur') spoken.push(argv), heard.push('speech')
@@ -32,6 +32,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     files[path] = text
     return { value: undefined } as never
   })
+  on('env.get', (_$, e) => ({ value: ({ HOME: '/home/me', TERM_PROGRAM: 'ghostty' } as Record<string, string>)[e.name] }) as never)
   on('store.get', (_$, e) => ({ value: store[e.key] }) as never)
   on('store.set', (_$, e) => ((store[e.key] = e.value), { value: undefined }) as never)
   on('command.register', () => ({ value: {} }) as never)

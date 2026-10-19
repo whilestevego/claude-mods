@@ -21,7 +21,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
       return out('A\t/dev/ttys000\t✳ Plan review\t/home/me/hobby/redouble\nB\t/dev/ttys001\t~\t/home/me\nC\t/dev/ttys004\t✳ Murmur Mods\t/home/me/.claude\n')
     }
     if (script.includes('ps -ax')) return out('/dev/ttys000\n/dev/ttys004\n')
-    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004 4242\n' : '')
+    return out(script.includes('ps -o tty') ? '/dev/ttys004 4242\n' : '')
   })
   on('session.id', () => ({ value: 's' }) as never)
   on('session.messages', () => ({ value: [{ role: 'user', text: 'Build the progress bar', toolUses: [] }] }) as never)
@@ -32,6 +32,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
   on('ui.close', () => ({ value: {} }) as never)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/home/me' : undefined }) as never)
   on('session.end', () => ({ sessionId: 's' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('tool.call', () => ({ result: {}, text: '', isError: opts.toolFails === true }) as never)
@@ -190,11 +191,12 @@ test('/goto reports a failing query instead of claiming there are no sessions', 
   on('process.run', (_$, e) => {
     const script = (e.argv as string[])[2] ?? ''
     if (script.includes('ps -ax')) return { value: { exitCode: 2, stdout: '', stderr: 'awk: syntax error' } } as never
-    return { value: { exitCode: 0, stdout: script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '', stderr: '' } } as never
+    return { value: { exitCode: 0, stdout: script.includes('ps -o tty') ? '/dev/ttys004\n' : '', stderr: '' } } as never
   })
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', () => ({ text: '' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/home/me' : undefined }) as never)
   await $.session.start(start)
   const r = await $.command.run({ command: 'goto', args: '' } as never)
   expect(r.text).toBe("/goto couldn't list sessions: ps query failed: awk: syntax error")
@@ -209,7 +211,7 @@ test('/keybind adds, refuses what Ghostty rejects, and removes', { options: { ke
     const out = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '' } }) as never
     if (script.includes('validate-config')) return out(valid ? '' : 'claude-keybinds:4:keybind: error.InvalidAction', valid ? 0 : 1)
     if (script.includes('[ -f')) return out('/home/me/Library/Application Support/com.mitchellh.ghostty\n')
-    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004\n' : '')
+    return out(script.includes('ps -o tty') ? '/dev/ttys004\n' : '')
   })
   on('fs.read', (_$, e) => {
     const path = (e as unknown as { path: string }).path
@@ -223,6 +225,7 @@ test('/keybind adds, refuses what Ghostty rejects, and removes', { options: { ke
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', () => ({ text: '' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/home/me' : undefined }) as never)
   await $.session.start(start)
   const run = async (args: string) => (await $.command.run({ command: 'keybind', args } as never)).text
   const dir = '/home/me/Library/Application Support/com.mitchellh.ghostty'
