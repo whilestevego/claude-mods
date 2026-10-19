@@ -99,6 +99,38 @@ test('waiting on you: ❓ in the title, a paused bar and a notification', async 
   expect(w.at(-2) + w.at(-1)!).toContain('✳ Tab Progress Bar')
 })
 
+test('other calls finishing while a dialog is up leave the ❓; answering it clears it', async ($, on) => {
+  const clock = mock.clock(on)
+  const w = machine(on)
+  await $.session.start(start)
+  await $.prompt.submit(submit)
+  await asks($, 'u1')
+  w.claude.status = 'dialog'
+  await clock.advance(600)
+  await settle(); await clock.advance(200)
+  const titles = () => w.filter(s => s.startsWith('set_surface_title:'))
+  expect(titles().at(-1)).toBe('set_surface_title:❓ Tab Progress Bar')
+  await $.tool.call({ tool: 'Read', file_path: '/a', tool_use_id: 'u2' } as never)                  // a parallel read
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u3', agentId: 'sub' } as never)  // a subagent's call
+  await settle(); await clock.advance(200)
+  expect(titles().at(-1)).toBe('set_surface_title:❓ Tab Progress Bar')
+  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
+  await settle(); await clock.advance(200)
+  expect(titles().at(-1)).toBe('set_surface_title:✳ Tab Progress Bar')
+})
+
+test("a question keeps the ❓ until it's answered", async ($, on) => {
+  const clock = mock.clock(on)
+  const w = machine(on)
+  await $.session.start(start)
+  await $.prompt.submit(submit)
+  const question = $.tool.call({ tool: 'AskUserQuestion', questions: [], tool_use_id: 'q1' } as never)
+  await question
+  await settle(); await clock.advance(200)
+  expect(w.filter(s => s.startsWith('set_surface_title:')).at(-1)).toBe('set_surface_title:✳ Tab Progress Bar')
+  expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
+})
+
 test('auto mode approving a call that asks is not waiting on you', async ($, on) => {
   const clock = mock.clock(on)
   const w = machine(on)

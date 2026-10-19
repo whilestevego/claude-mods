@@ -51,6 +51,8 @@ let isRunning = false
 let isWaiting = false
 /** Calls the permission check put to you, until they run or are refused. */
 const asking = new Set<string>()
+/** The calls waiting on you right now (a dialog that's up, a question): ❓ until the last of them is answered. */
+const waitingOn = new Set<string>()
 let home = ''
 /** The sessions the /goto picker shows. */
 let picks: Ranked[] = []
@@ -150,7 +152,8 @@ async function voiceSpeaksIt($: EngineInterface): Promise<boolean> {
   return rows.some(r => r.key === 'say.needsYou' && r.value === true)
 }
 
-async function waitOnYou($: EngineInterface, why: string) {
+async function waitOnYou($: EngineInterface, id: string, why: string) {
+  waitingOn.add(id)
   isWaiting = true
   void setStatus($, 'waiting').catch(() => {})
   await Promise.all([drawTitle($), drawBar($)])
@@ -167,12 +170,13 @@ async function watchForDialog($: EngineInterface, id: string, why: string) {
   for (let i = 0; i < 1200; i++) {
     await $.clock.sleep(500)
     if (!asking.has(id)) return
-    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) return waitOnYou($, why)
+    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) return waitOnYou($, id, why)
   }
 }
 
-async function stopWaiting($: EngineInterface) {
-  if (!isWaiting) return
+/** `id` was answered; the ❓ goes once nothing else waits on you. */
+async function answered($: EngineInterface, id: string) {
+  if (!waitingOn.delete(id) || waitingOn.size > 0) return
   isWaiting = false
   void setStatus($, isRunning ? 'working' : 'idle').catch(() => {})
   await Promise.all([drawTitle($), drawBar($)])
@@ -571,6 +575,7 @@ export const register: Register = (on, options) => {
     hasFailed = false
     isRunning = true
     isWaiting = false
+    waitingOn.clear()
     void Promise.all([drawTitle($), drawBar($), setStatus($, 'working').catch(() => {})])
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -582,20 +587,22 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
-    void waitOnYou($, 'Claude has a question for you')
+    if (e.tool_use_id) void waitOnYou($, e.tool_use_id, 'Claude has a question for you')
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // Every tool call: a permission prompt or a question waits inside next(); its return means you answered.
+  // Every tool call: a permission prompt or a question waits inside next(); its return means you answered that one.
+  // Other calls finishing meanwhile (parallel reads, subagents) leave the ❓ alone.
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
-    asking.delete((e as { tool_use_id?: string }).tool_use_id ?? '')
+    const id = e.tool_use_id ?? ''
+    asking.delete(id)
     const failed = ran.deny === undefined && ran.isError === true
-    if (failed !== hasFailed) {
+    if (!e.agentId && failed !== hasFailed) {
       hasFailed = failed
       void drawBar($)
     }
-    void stopWaiting($)
+    void answered($, id)
     return ran
   }).catch(($, e, next) => next(e))
 
@@ -609,6 +616,7 @@ export const register: Register = (on, options) => {
     if (e.agentId) return next(e)
     isRunning = false
     isWaiting = false
+    waitingOn.clear()
     void Promise.all([drawTitle($), drawBar($), setStatus($, 'idle').catch(() => {})])
     const now = Date.now()
     if (cfg.tabTitle && now - titledAt >= cfg.titleMinutes * 60_000) {
