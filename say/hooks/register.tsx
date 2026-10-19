@@ -1,4 +1,4 @@
-import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register, RenderNode } from 'claude-code'
 
 import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
 import type { Todo } from './speech'
@@ -377,7 +377,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PICKER }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const mine = currentVoice()
-    const rows: unknown[] = []
+    const rows: RenderNode[] = []
     let group = ''
     picker.voices.forEach((v, i) => {
       if (v.group !== group) {
