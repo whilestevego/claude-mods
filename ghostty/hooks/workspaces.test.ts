@@ -185,3 +185,15 @@ test('/workspace close stops nothing while another session is busy, unless --for
   expect(killed).toEqual(['-TERM', '100'])
   expect(JSON.parse(files[`${WS}/sprint.json`]!).name).toBe('Sprint')
 })
+
+test("a name that lands on another workspace's file never overwrites it", { options: { keybinds: false } }, async ($, on) => {
+  const other = JSON.stringify({ name: 'Brilliant Admin Work', savedAt: 1, tabs: [[{ kind: 'shell', cwd: '/elsewhere', title: '' }]] })
+  const files: Record<string, string> = { [`${WS}/brilliant-admin-work.json`]: other }
+  machine(on, files)
+  await $.session.start(start)
+  const r = await $.command.run({ command: 'workspace', args: 'save' } as never)  // Haiku picks the same name
+  expect(r.text).toMatch(/^Saved workspace "Brilliant Admin Work"/)
+  expect(files[`${WS}/brilliant-admin-work.json`]).toBe(other)
+  expect(files[`${WS}/brilliant-admin-work-2.json`]).toBeDefined()
+  expect((await $.command.run({ command: 'workspace', args: 'save brilliant admin work' } as never)).text).toMatch(/^Updated/)  // you named it
+})

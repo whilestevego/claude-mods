@@ -114,7 +114,8 @@ up where it left off.
   `/workspace list`, then press its number.
 - **What doesn't come back:** programs that were running (a dev server, a test watcher),
   and the exact split layout. Splits reopen side by side.
-- **Where they're kept:** `~/.claude/workspaces/`, one JSON file per workspace.
+- **Where they're kept:** `~/.claude/workspaces/`, one JSON file per workspace. Saving never
+  overwrites a different workspace that happens to have the same name: the new one gets a file of its own.
 
 ## Setup
 
