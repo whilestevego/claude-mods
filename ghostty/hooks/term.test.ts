@@ -1,20 +1,19 @@
 import { test, expect } from 'claude-code/testing'
 
 import {
-  claudeSessions, matchSessions, notify, percentDone, progress, Progress, runningBar, safe, shortFolder, shouldNotify, tabTitle, title,
+  claudeSessions, matchSessions, percentDone, progress, Progress, runningBar, safe, shortFolder, shouldNotify, tabTitle, titleAction,
 } from './term'
 
 test('sequences', () => {
-  expect(title('✳ Fix Login Bug')).toBe('\x1b]2;✳ Fix Login Bug\x07')
+  expect(titleAction('✳ Fix Login Bug')).toBe('set_surface_title:✳ Fix Login Bug')
   expect(progress(Progress.value, 42.4)).toBe('\x1b]9;4;1;42\x07')
   expect(progress(Progress.busy)).toBe('\x1b]9;4;3\x07')
   expect(progress(Progress.hide)).toBe('\x1b]9;4;0\x07')
-  expect(notify('Claude Code', 'Needs permission; for Bash')).toBe('\x1b]777;notify;Claude Code;Needs permission, for Bash\x07')
 })
 
 test('nothing can inject an escape sequence', () => {
   expect(safe('a\x1b]2;pwned\x07b')).toBe('a ]2;pwned b')
-  expect(title('x\x07\x1b')).toBe('\x1b]2;x\x07')
+  expect(titleAction('x\x07\x1b')).toBe('set_surface_title:x')
 })
 
 test('tab title shows ❓ while waiting', () => {

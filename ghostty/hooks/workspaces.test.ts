@@ -24,7 +24,7 @@ function machine(on: On, files: Record<string, string>) {
     const argv = e.argv as string[]
     const script = argv[2] ?? ''
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
-    if (script.includes('printf')) printed.push(argv[4]!)
+    if (script.includes('printf') || script.includes('perform action')) printed.push(argv[4]!)
     if (argv[0] === 'osascript') {
       scripts.push(argv)
       if (script.includes('repeat with t in terminals\n')) return out('A\t/dev/ttys000\t✳ Admin redesign\t/home/me/work\nB\t/dev/ttys001\t✳ Flag search\t/home/me/work\nC\t/dev/ttys004\t✳ Me\t/home/me/work\n')
@@ -155,11 +155,11 @@ test('a resumed session gets its title back; /workspace open hands each tab its 
   machine(on, files)
   await $.session.start(start)
   await new Promise(r => setTimeout(r, 20))
-  expect(printed).toContain('\x1b]2;✳ Saved Session Title Here\x07')
+  expect(printed).toContain('set_surface_title:✳ Saved Session Title Here')
   await $.command.run({ command: 'workspace', args: 'open sprint' } as never)
   expect(files[`${TITLES}/${other}`]).toBe('Admin redesign')               // no title of its own yet: the saved one
   expect(files[`${TITLES}/${me}`]).toBe('Saved Session Title Here')        // its own, newer title wins
   expect((await $.command.run({ command: 'title', args: '' } as never)).text).toBe('Tab title: Brilliant Admin Work')
   expect(files[`${TITLES}/${me}`]).toBe('Brilliant Admin Work')
-  expect(printed.at(-1)).toBe('\x1b]2;✳ Brilliant Admin Work\x07')
+  expect(printed.at(-1)).toBe('set_surface_title:✳ Brilliant Admin Work')
 })

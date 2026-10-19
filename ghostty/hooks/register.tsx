@@ -4,7 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { WorkspaceRow } from '../types'
 
 import {
-  claudeSessions, matchSessions, notify, progress, Progress, runningBar, shortFolder, shouldNotify, tabTitle, title,
+  claudeSessions, matchSessions, progress, Progress, runningBar, shortFolder, shouldNotify, tabTitle, titleAction,
 } from './term'
 import type { Session, Todo } from './term'
 import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, withInclude } from './keybinds'
@@ -112,22 +112,36 @@ async function goTo($: EngineInterface, s: Session) {
   await $.process.run(['osascript', '-e', FOCUS, s.id])
 }
 
-// A mod can't print to the screen, so escape sequences go straight to Claude's tty.
+// A mod can't print to the screen, so escape sequences go straight to Claude's tty. Bytes written there can land
+// inside a frame Claude is drawing and garble it, so only the progress bar (no other way to set it) goes this way.
 async function send($: EngineInterface, bytes: string) {
   if (!tty || !bytes) return
   await $.process.run(['sh', '-c', 'printf "%s" "$1" > "$2"', 'sh', bytes, tty]).catch(() => null)
 }
 
+const SET_TITLE = `on run argv
+tell application "Ghostty" to perform action (item 2 of argv) on (first terminal whose tty is (item 1 of argv))
+end run`
+
 async function drawTitle($: EngineInterface) {
+  if (!tty) return
   if (cfg.tabTitle || (cfg.waitingBadge && isWaiting) || summary) {
-    await send($, title(tabTitle(summary, cfg.waitingBadge && isWaiting)))
+    await $.process.run(['osascript', '-e', SET_TITLE, tty, titleAction(tabTitle(summary, cfg.waitingBadge && isWaiting))]).catch(() => null)
   }
 }
 
+let wantedBar = ''
+let sentBar = ''
+
 async function drawBar($: EngineInterface) {
   if (!cfg.tabProgress) return
-  if (isWaiting) return send($, progress(Progress.paused))
-  await send($, isRunning ? runningBar(todos, hasFailed) : progress(Progress.hide))
+  wantedBar = isWaiting ? progress(Progress.paused) : isRunning ? runningBar(todos, hasFailed) : progress(Progress.hide)
+  // Let the redraw that came with this change (a submitted prompt, a finished turn) finish first; the last call wins.
+  // ponytail: a fixed delay only dodges that redraw, a spinner frame can still collide; no way to sync with Claude's renderer.
+  await $.clock.sleep(150)
+  if (wantedBar === sentBar) return
+  sentBar = wantedBar
+  await send($, sentBar)
 }
 
 /** The say mod speaks "needs you" itself when it's loaded with that setting on. */
@@ -140,7 +154,7 @@ async function waitOnYou($: EngineInterface, why: string) {
   isWaiting = true
   void setStatus($, 'waiting').catch(() => {})
   await Promise.all([drawTitle($), drawBar($)])
-  if (shouldNotify(cfg.waitingNotification, await voiceSpeaksIt($))) await send($, notify('Claude Code', why))
+  if (shouldNotify(cfg.waitingNotification, await voiceSpeaksIt($))) await $.ui.notify(why, { title: 'Claude Code' }).catch(() => null)
 }
 
 /**

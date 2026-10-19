@@ -1,4 +1,4 @@
-// Ghostty's escape sequences, and the small decisions around them. Pure: register.ts writes the bytes.
+// Ghostty's escape sequences and actions, and the small decisions around them. Pure: register.ts sends them.
 
 const ESC = '\x1b'
 const BEL = '\x07'
@@ -8,8 +8,8 @@ export function safe(text: string): string {
   return text.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-/** OSC 2: the tab title. */
-export const title = (text: string) => `${ESC}]2;${safe(text)}${BEL}`
+/** Ghostty's set_surface_title action, sent over AppleScript so no bytes race Claude's own drawing on the tty. */
+export const titleAction = (text: string) => `set_surface_title:${safe(text)}`
 
 /** OSC 9;4 states, as Ghostty draws them on the tab. */
 export const Progress = { hide: 0, value: 1, error: 2, busy: 3, paused: 4 } as const
@@ -18,12 +18,6 @@ export const Progress = { hide: 0, value: 1, error: 2, busy: 3, paused: 4 } as c
 export function progress(state: number, percent?: number): string {
   const p = percent === undefined ? '' : `;${Math.max(0, Math.min(100, Math.round(percent)))}`
   return `${ESC}]9;4;${state}${p}${BEL}`
-}
-
-/** OSC 777: a desktop notification. `;` separates fields there, so it can't appear inside one. */
-export function notify(heading: string, body: string): string {
-  const field = (s: string) => safe(s).replace(/;/g, ',')
-  return `${ESC}]777;notify;${field(heading)};${field(body)}${BEL}`
 }
 
 /** The tab title: the session's summary, with ❓ in front while Claude waits on you. */

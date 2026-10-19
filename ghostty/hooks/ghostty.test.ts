@@ -15,7 +15,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
     const argv = e.argv as string[]
     const script = argv[2] ?? ''
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
-    if (script.includes('printf')) written.push(argv[4]!)
+    if (script.includes('printf') || script.includes('perform action')) written.push(argv[4]!)
     if (argv[0] === 'osascript' && script.includes('focus (first terminal')) focused.push(argv[3]!)
     if (argv[0] === 'osascript' && script.includes('repeat with t in terminals')) {
       return out('A\t/dev/ttys000\t✳ Plan review\t/home/me/hobby/redouble\nB\t/dev/ttys001\t~\t/home/me\nC\t/dev/ttys004\t✳ Murmur Mods\t/home/me/.claude\n')
@@ -43,6 +43,7 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
   })
   on('ui.render', () => ({ type: 'Box', children: [] }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
+  on('ui.notify', (_$, e) => (written.push(`notify:${e.title};${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
   return Object.assign(written, { focused, claude })
 }
 
@@ -53,29 +54,31 @@ const asks = ($: { tool: { check(e: never): Promise<unknown> } }, id: string) =>
 const done = { answer: 'Done.', durationMs: 5000, isAborted: false, turnId: 't', reason: 'answer' } as never
 
 test('a turn shows a busy bar, follows the todo list, and clears at the end', async ($, on) => {
+  const clock = mock.clock(on)
   const w = machine(on)
   await $.session.start(start)
   await $.prompt.submit(submit)
-  await settle()
+  await settle(); await clock.advance(200)
   expect(w).toContain('\x1b]9;4;3\x07')
   await $.tool.call({ tool: 'TodoWrite', todos: [
     { content: 'a', status: 'completed', activeForm: 'A' },
     { content: 'b', status: 'pending', activeForm: 'B' },
   ] } as never)
-  await settle()
+  await settle(); await clock.advance(200)
   expect(w).toContain('\x1b]9;4;1;50\x07')
   await $.turn.complete(done)
-  await settle()
+  await settle(); await clock.advance(200)
   expect(w).toContain('\x1b]9;4;0\x07')
-  expect(w).toContain('\x1b]2;✳ Tab Progress Bar\x07')  // the Haiku summary became the title
+  expect(w).toContain('set_surface_title:✳ Tab Progress Bar')  // the Haiku summary became the title
 })
 
 test('a failed tool call turns the bar red', async ($, on) => {
+  const clock = mock.clock(on)
   const w = machine(on, { toolFails: true })
   await $.session.start(start)
   await $.prompt.submit(submit)
   await $.tool.call({ tool: 'Bash', command: 'false' } as never)
-  await settle()
+  await settle(); await clock.advance(200)
   expect(w).toContain('\x1b]9;4;2;100\x07')
 })
 
@@ -87,12 +90,12 @@ test('waiting on you: ❓ in the title, a paused bar and a notification', async 
   await asks($, 'u1')
   w.claude.status = 'dialog'
   await clock.advance(600)
-  await settle()
-  expect(w).toContain('\x1b]2;❓ Tab Progress Bar\x07')
+  await settle(); await clock.advance(200)
+  expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
   expect(w).toContain('\x1b]9;4;4\x07')
-  expect(w).toContain('\x1b]777;notify;Claude Code;Claude needs your permission to use Bash\x07')
+  expect(w).toContain('notify:Claude Code;Claude needs your permission to use Bash')
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)  // you allowed it: the tool ran
-  await settle()
+  await settle(); await clock.advance(200)
   expect(w.at(-2) + w.at(-1)!).toContain('✳ Tab Progress Bar')
 })
 
@@ -106,8 +109,8 @@ test('auto mode approving a call that asks is not waiting on you', async ($, on)
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
   w.claude.status = 'dialog'                                     // a later dialog is another call's
   await clock.advance(1000)
-  await settle()
-  expect(w.some(s => s.includes('❓') || s.includes(']777;'))).toBe(false)
+  await settle(); await clock.advance(200)
+  expect(w.some(s => s.includes('❓') || s.startsWith('notify:'))).toBe(false)
 })
 
 test('no notification when the say mod says it out loud', async ($, on) => {
@@ -118,9 +121,9 @@ test('no notification when the say mod says it out loud', async ($, on) => {
   await asks($, 'u1')
   w.claude.status = 'dialog'
   await clock.advance(600)
-  await settle()
-  expect(w).toContain('\x1b]2;❓ Tab Progress Bar\x07')
-  expect(w.some(s => s.includes(']777;'))).toBe(false)
+  await settle(); await clock.advance(200)
+  expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
+  expect(w.some(s => s.startsWith('notify:'))).toBe(false)
 })
 
 test('everything off writes nothing', { options: { tabTitle: false, tabProgress: false, waitingBadge: false, waitingNotification: 'never' } }, async ($, on) => {
