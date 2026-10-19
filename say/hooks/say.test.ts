@@ -8,7 +8,7 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  * Fakes the machine: Claude on ttys004 (pid 4242) in Ghostty, `focused` deciding what osascript reports,
  * `files` the disk, `alive` which other sessions still run.
  */
-function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, alive: string[] = []) {
+function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, alive: string[] = [], store: Record<string, unknown> = {}) {
   const spoken: string[][] = []
   /** What reached the speakers, in order: 'chime' or 'speech'. */
   const heard: string[] = []
@@ -32,6 +32,8 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     files[path] = text
     return { value: undefined } as never
   })
+  on('store.get', (_$, e) => ({ value: store[e.key] }) as never)
+  on('store.set', (_$, e) => ((store[e.key] = e.value), { value: undefined }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('session.id', () => ({ value: 'aaaaaaaa-1111-2222-3333-444444444444' }) as never)
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
@@ -167,6 +169,23 @@ test('a rate limit is warned about once per window', async ($, on) => {
   await measure(95)
   await settle()
   expect(spoken.map(a => a.at(-1))).toEqual(["Heads up: you've used 91 percent of your five hour limit."])
+})
+
+test('a limit another session already warned about is not said again', async ($, on) => {
+  const spoken = machine(on, { tty: '' }, {}, [], { warnedLimits: ['five_hour@R1'] })
+  await $.session.start(start)
+  await $.session.measure({ context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 95, resetsAt: 'R1' }], changed: ['rateLimits'] } as never)
+  await settle()
+  expect(spoken).toHaveLength(0)
+})
+
+test('/say hush is kept in session state, which outlives a reload of the mod', async ($, on) => {
+  const writes: unknown[] = []
+  on('state.set', (_$, e, next) => (writes.push(e), next(e)))
+  machine(on, { tty: '' })
+  await $.session.start(start)
+  await $.command.run({ command: 'say', args: 'hush' } as never)
+  expect(writes).toContainEqual(expect.objectContaining({ plugin: 'say', key: 'muted', value: true }))
 })
 
 test('long turns check in with the todo in progress', { options: { checkinMinutes: 1 } }, async ($, on) => {

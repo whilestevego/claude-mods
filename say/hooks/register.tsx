@@ -42,7 +42,13 @@ function config(o: PluginOptions): Config {
   }
 }
 
-// The module's own session state (a reload starts it over, which only forgets a /say hush).
+/** /say hush, for this session: in $.state so a hot reload of the mod keeps it. */
+const MUTED = { plugin: 'say', key: 'muted' } as const
+const isMuted = async ($: EngineInterface) => (await $.state.get(MUTED)).value === true
+/** Rate-limit windows already warned about, as "kind@resetsAt": in $.store, so one warning covers every session. */
+const WARNED = 'warnedLimits'
+
+// The module's own session state; a reload starts it over.
 let cfg: Config
 let claude: { tty: string; pid: string } | null = null
 let home = ''
@@ -55,7 +61,6 @@ const PICKER = 'claude-say-picker'
 const currentVoice = () => chosen || cfg.voice || sessionVoice || 'af_heart'
 let picker: { voices: VoiceInfo[]; others: Set<string> } = { voices: [], others: new Set() }
 let inGhostty = false
-let muted = false
 let lastRequest = ''
 let lastAnswer = ''
 let todos: Todo[] = []
@@ -63,7 +68,6 @@ let checkin: { cancel(): void } | undefined
 let turnStartedAt = 0
 /** Calls the permission check put to you, until they run or are refused. */
 const asking = new Set<string>()
-const warned = new Set<string>()
 
 // "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
 // this shell, owns the tty too, and changes when mods reload). Its pid keys the session's voice.
@@ -176,7 +180,7 @@ async function isAway($: EngineInterface): Promise<boolean> {
 
 // Interrupt, don't stack: each new line cuts off whatever is still playing.
 async function say($: EngineInterface, text: string, always = false) {
-  if (muted || !text.trim() || (!always && !(await isAway($)))) return
+  if (!text.trim() || (await isMuted($)) || (!always && !(await isAway($)))) return
   // A soft bell first (the mod's chime.wav), so speech never starts out of nowhere. Not awaited: murmur takes
   // about as long to get ready as the bell rings.
   if (cfg.chime) void $.process.run(['afplay', `${$.plugin.root}/chime.wav`]).catch(() => null)
@@ -228,7 +232,7 @@ async function pickVoice($: EngineInterface, query: string): Promise<{ text: str
   if (voices.length === 0) return { text: "Couldn't list murmur's voices. Is murmur installed?" }
   if (!query) {
     const name = voices.find(v => v.id === currentVoice())?.name ?? currentVoice()
-    if (muted) return { text: `🔊 This session speaks as ${name} (${currentVoice()}), muted. /say pick for another.` }
+    if (await isMuted($)) return { text: `🔊 This session speaks as ${name} (${currentVoice()}), muted. /say pick for another.` }
     void say($, sample(name), true)
     return { text: `🔊 This session speaks as ${name} (${currentVoice()}). /say pick for another.` }
   }
@@ -260,20 +264,21 @@ const HELP = [
 ].join('\n')
 
 async function hush($: EngineInterface): Promise<{ text: string }> {
-  muted = !muted
+  const muted = !(await isMuted($))
+  await $.state.set(MUTED, muted)
   if (muted) await $.process.run(['murmur', 'stop']).catch(() => null)
   return { text: muted ? '🔇 Spoken updates muted for this session. /say hush again to unmute.' : '🔊 Spoken updates back on.' }
 }
 
 async function readAloud($: EngineInterface): Promise<{ text: string }> {
   if (!lastAnswer) return { text: 'Nothing to read yet.' }
-  if (muted) return { text: 'Muted: /say hush to unmute first.' }
+  if (await isMuted($)) return { text: 'Muted: /say hush to unmute first.' }
   void say($, prose(lastAnswer, 'Code omitted.'), true)
   return { text: '🔊 Reading the last answer aloud. /say hush stops it.' }
 }
 
 async function tldrAloud($: EngineInterface): Promise<{ text: string }> {
-  if (muted) return { text: 'Muted: /say hush to unmute first.' }
+  if (await isMuted($)) return { text: 'Muted: /say hush to unmute first.' }
   const r = await $.model.fork({
     prompt: 'In 2 or 3 short sentences meant to be spoken aloud, summarize this session so far: the goal, what is done, and what is next. Plain words only, no markdown or code.',
   })
@@ -344,21 +349,24 @@ export const register: Register = (on, options) => {
     const error = errorLine(e.reason, e.answer)
     if (error) {
       if (cfg.needsYou) void say($, error)
-    } else if (cfg.turnSummaries && e.reason === 'answer' && isLong && !muted) {
+    } else if (cfg.turnSummaries && e.reason === 'answer' && isLong && !(await isMuted($))) {
       const request = lastRequest
       void summarize($, e.turnId, request, e.answer).then(line => say($, line))
     }
     return next(e)
   })
 
+  // The limits are your account's, not this session's: whichever session sees one cross first says it.
+  // ponytail: two sessions measuring in the same instant can both say it; a lock if that ever happens.
   on('session.measure', async ($, e, next) => {
-    if (cfg.rateLimitWarnings) {
-      for (const w of e.rateLimits) {
-        const key = `${w.kind}@${w.resetsAt ?? ''}`
-        if (w.percentUsed >= cfg.rateLimitPercent && !warned.has(key)) {
-          warned.add(key)
-          void say($, rateLimitLine(w.kind, w.percentUsed))
-        }
+    const crossed = cfg.rateLimitWarnings ? e.rateLimits.filter(w => w.percentUsed >= cfg.rateLimitPercent) : []
+    if (crossed.length) {
+      const stored = await $.store.get(WARNED)
+      const warned = Array.isArray(stored) ? (stored as string[]) : []
+      const fresh = crossed.filter(w => !warned.includes(`${w.kind}@${w.resetsAt ?? ''}`))
+      if (fresh.length) {
+        await $.store.set(WARNED, [...warned, ...fresh.map(w => `${w.kind}@${w.resetsAt ?? ''}`)].slice(-20))
+        for (const w of fresh) void say($, rateLimitLine(w.kind, w.percentUsed))
       }
     }
     return next(e)
