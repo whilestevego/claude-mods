@@ -24,7 +24,7 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - Tab title: a 4-word summary of the session; `/title` for a new one now; restored on resume.
   - Tab progress bar: follows the to-do list, red after a failed tool call.
   - ❓ in the tab and a notification when Claude waits on you (say speaks it instead when on).
-  - `/goto` (⌘⌃G): jump between sessions, waiting ones first; `/goto next` to the longest wait.
+  - `/goto`: jump between sessions, waiting ones first; `/goto next` to the longest wait.
   - `/workspace save`, `close`, `list`, `open`: put a window of sessions away and bring it back, every conversation resumed with its tab title.
   - `/keybind`: Ghostty keys that type into Claude.
 
