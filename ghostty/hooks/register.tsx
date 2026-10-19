@@ -298,21 +298,34 @@ async function saveWorkspace($: EngineInterface, given: string): Promise<Saved> 
   const claudePids = claudePidsFrom(ps.stdout)
   const tabs = fromWindow(window.stdout, claudePids, await conversations($, claudePids.values()))
   if (tabs.length === 0) return { text: "Couldn't find this session's Ghostty window." }
-  // No name: the saved workspace this window was opened from keeps its name, else Haiku names it.
-  let name = given.trim() || sameWorkspace(tabs, await savedWorkspaces($))?.name || ''
+  // No name: the saved workspace this window was opened from keeps its name and file, else Haiku names it.
+  const all = await savedWorkspaces($)
+  const same = given.trim() ? undefined : sameWorkspace(tabs, all)
+  let name = given.trim() || same?.name || ''
   if (!name) {
     const r = await $.model.complete({ model: 'haiku', prompt: namePrompt(tabs), maxTokens: 20, timeoutMs: 8000 })
     name = (r.isAnswered && cleanName(r.text)) || `Workspace ${new Date().toISOString().slice(0, 10)}`
   }
+  const file = same?.file ?? fileFor(name, all, given.trim() !== '')
+  const existed = all.some(w => w.file === file)
   const ws: Workspace = { name, savedAt: Date.now(), tabs }
   await $.process.run(['mkdir', '-p', workspaceDir()])
-  const file = `${workspaceDir()}/${slug(name)}.json`
-  const existed = await $.fs.stat(file).then(() => true, () => false)
   await $.fs.write(file, JSON.stringify(ws, null, 2))
   const unknown = tabs.flat().filter(p => p.kind === 'claude' && !p.sessionId)
   const text = `${existed ? 'Updated' : 'Saved'} workspace "${name}": ${describe(ws)}.` +
     (unknown.length ? ` Couldn't find the conversation for ${unknown.map(p => `"${p.title}"`).join(', ')}: ${unknown.length === 1 ? 'it' : 'they'} will reopen as a new session.` : '')
   return { text, window: window.stdout, claudePids }
+}
+
+/**
+ * Where `name` is saved: its slug's file, unless that holds a different workspace (another name, or one
+ * Haiku's name happened to land on), which is never overwritten: then the first free `-2`, `-3`, …
+ */
+function fileFor(name: string, all: ReadonlyArray<{ file: string; name: string }>, isNamedByYou: boolean): string {
+  const at = (suffix: string) => `${workspaceDir()}/${slug(name)}${suffix}.json`
+  const held = all.find(w => w.file === at(''))
+  if (!held || (isNamedByYou && held.name.toLowerCase() === name.toLowerCase())) return at('')
+  for (let n = 2; ; n++) if (!all.some(w => w.file === at(`-${n}`))) return at(`-${n}`)
 }
 
 /**
