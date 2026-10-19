@@ -2,6 +2,7 @@
   "name": "say",
   "version": "0.2.0",
   "description": "Claude Code speaks through murmur (Kokoro on the Apple Neural Engine): turn summaries, needs-you alerts, background tasks, progress check-ins and rate-limit warnings, each session in its own voice (/say picks one)",
+  "types": "./types/index.d.ts",
   "userConfig": {
     "speakWhen": {
       "type": "string",
