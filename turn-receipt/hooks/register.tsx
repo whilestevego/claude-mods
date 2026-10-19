@@ -14,6 +14,7 @@ async function spent($: EngineInterface) {
 
 export const register: Register = on => {
   // The turn in progress; a reload mid-turn just under-counts that one turn.
+  // Hooks that gate a prompt or a tool call pass it on untouched if they fail: a receipt must never block work.
   let tools = 0
   let files = new Set<string>()
   let usdAtStart: number | null = null
@@ -23,7 +24,7 @@ export const register: Register = on => {
     files = new Set()
     usdAtStart = await spent($)
     return next(e)
-  })
+  }).catch(($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {
     tools += 1
@@ -31,7 +32,7 @@ export const register: Register = on => {
     if (!ran.isError && (e.tool === 'Edit' || e.tool === 'Write')) files.add(e.file_path)
     if (!ran.isError && e.tool === 'NotebookEdit') files.add(e.notebook_path)
     return ran
-  })
+  }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId) return next(e)
