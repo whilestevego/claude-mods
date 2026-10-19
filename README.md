@@ -101,7 +101,7 @@ up where it left off.
 | Command | What it does |
 |---|---|
 | `/workspace save [name]` | Saves this window. With no name, it keeps the name the window already had, or Claude Haiku picks one from the tabs. |
-| `/workspace close [name]` | Saves this window, then exits every Claude session in it and closes their tabs. Your current tab stays open at the shell, and shell tabs stay open. |
+| `/workspace close [name]` | Saves this window, then exits every Claude session in it and closes their tabs. Your current tab stays open at the shell, and shell tabs stay open. If another session is still working or waiting on you, it closes nothing and names them; `/workspace close --force` closes them anyway. |
 | `/workspace list` | Shows your saved workspaces, newest first. Press a number or Enter to reopen one, or Tab to **✕ delete** to remove it. |
 | `/workspace open <name>` | Reopens a saved workspace in a new window. Part of the name is enough. |
 

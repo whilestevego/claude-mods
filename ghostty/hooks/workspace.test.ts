@@ -76,7 +76,7 @@ test('close every Claude pane but my own; shells stay', () => {
   const window = '1\t/dev/ttys004\t/u\tMe\tT4\n2\t/dev/ttys002\t/u\tA\tT2\n2\t/dev/ttys009\t/u\tshell\tT9\n3\t/dev/ttys003\t/u\tB\tT3\n'
   const pids = claudePidsFrom('/dev/ttys004 4\n/dev/ttys002 2\n/dev/ttys003 3\n')
   expect(closable(window, pids, '/dev/ttys004')).toEqual([
-    { id: 'T2', tty: '/dev/ttys002', pid: '2' },
-    { id: 'T3', tty: '/dev/ttys003', pid: '3' },
+    { id: 'T2', tty: '/dev/ttys002', pid: '2', title: 'A' },
+    { id: 'T3', tty: '/dev/ttys003', pid: '3', title: 'B' },
   ])
 })
