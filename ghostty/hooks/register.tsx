@@ -65,7 +65,7 @@ const WORKSPACES = 'claude-workspaces'
 const GOTO = 'claude-goto'
 
 // "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
-// this shell, owns the tty too). Without one, the nearest ancestor owning a tty.
+// this shell, owns the tty too). Without one, the nearest ancestor owning a tty. No API names Claude's tty or pid.
 const FIND_TTY = `p=$$
 first=
 while [ "$p" -gt 1 ]; do
@@ -78,10 +78,8 @@ done
 echo "$first"`
 
 async function locate($: EngineInterface) {
-  // HOME first: the tty search exits as soon as it finds one.
-  const found = (await $.process.run(['sh', '-c', `echo "$HOME"\n${FIND_TTY}`])).stdout.trim().split('\n')
-  home = found[0] ?? ''
-  ;[tty = '', pid = ''] = (found[1] ?? '').split(' ')
+  home = (await $.env.get('HOME')) ?? ''
+  ;[tty = '', pid = ''] = (await $.process.run(['sh', '-c', FIND_TTY])).stdout.trim().split(' ')
 }
 
 // Every Ghostty terminal as "id<TAB>tty<TAB>title<TAB>folder"; plus the ttys running Claude.

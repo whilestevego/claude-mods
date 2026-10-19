@@ -36,7 +36,7 @@ function machine(on: On, files: Record<string, string>) {
     if (argv[0] === 'rm') delete files[argv[2]!]
     if (argv[0] === 'kill') killed.push(...argv.slice(1))
     if (script.includes('kill -0')) return out(stillRunning.join('\n'))
-    return out(script.includes('ps -o tty') ? '/home/me\n/dev/ttys004 4242\n' : '')
+    return out(script.includes('ps -o tty') ? '/dev/ttys004 4242\n' : '')
   })
   const pathOf = (e: unknown) => (e as { path: string }).path
   on('fs.read', (_$, e) => (pathOf(e) in files ? { value: files[pathOf(e)] } : { deny: 'missing' }) as never)
@@ -54,6 +54,7 @@ function machine(on: On, files: Record<string, string>) {
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', (_$, e) => (ran.push((e as unknown as { command: string }).command), { text: '' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/home/me' : undefined }) as never)
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
   on('ui.close', () => ({ value: {} }) as never)
   on('ui.toast', () => ({ value: undefined }) as never)
