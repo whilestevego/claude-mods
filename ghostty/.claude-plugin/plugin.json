@@ -2,6 +2,10 @@
   "name": "ghostty",
   "version": "0.1.0",
   "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ and a notification when Claude waits on you, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
+  "author": {
+    "name": "Steve Godin",
+    "url": "https://github.com/whilestevego"
+  },
   "userConfig": {
     "tabTitle": {
       "type": "boolean",

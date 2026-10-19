@@ -2,6 +2,10 @@
   "name": "tldr",
   "version": "0.1.0",
   "description": "A one-line TL;DR under Claude's long replies, written by Claude Haiku; the say mod speaks the same line",
+  "author": {
+    "name": "Steve Godin",
+    "url": "https://github.com/whilestevego"
+  },
   "types": "./types/index.d.ts",
   "userConfig": {
     "minChars": { "type": "number", "title": "TL;DR: long reply (characters)", "description": "Replies shorter than this get no TL;DR", "default": 600 }
