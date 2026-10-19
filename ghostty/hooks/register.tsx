@@ -162,7 +162,8 @@ async function waitOnYou($: EngineInterface, id: string, why: string) {
 
 /**
  * A call that asks waits in Claude Code's dialog, or in auto mode its checker. Only the dialog marks the session
- * record waiting, so watch it while the call is pending. (Mods never hear the classic Notification event.)
+ * record waiting, so watch it while the call is pending. Mods hear neither classic.PermissionRequest nor
+ * classic.Notification while a dialog is up (checked on 2.1.301), so this file is the only sign.
  */
 async function watchForDialog($: EngineInterface, id: string, why: string) {
   asking.add(id)
