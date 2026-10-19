@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import {
-  claudeSessions, matchSessions, percentDone, progress, Progress, runningBar, safe, shortFolder, shouldNotify, tabTitle, titleAction,
+  claudeSessions, matchSessions, progress, Progress, runningBar, safe, shortFolder, shouldNotify, tabTitle, titleAction,
 } from './term'
 
 test('sequences', () => {
@@ -22,13 +22,9 @@ test('tab title shows ❓ while waiting', () => {
   expect(tabTitle('', true)).toBe('❓ Claude Code')
 })
 
-test('the running bar follows the todo list and turns red on failure', () => {
-  const todos = [{ status: 'completed' as const }, { status: 'in_progress' as const }, { status: 'pending' as const }, { status: 'pending' as const }]
-  expect(percentDone([])).toBeUndefined()
-  expect(runningBar([], false)).toBe('\x1b]9;4;3\x07')
-  expect(runningBar(todos, false)).toBe('\x1b]9;4;1;25\x07')
-  expect(runningBar(todos, true)).toBe('\x1b]9;4;2;25\x07')
-  expect(runningBar([], true)).toBe('\x1b]9;4;2;100\x07')
+test('the running bar is busy, and red after a failure', () => {
+  expect(runningBar(false)).toBe('\x1b]9;4;3\x07')
+  expect(runningBar(true)).toBe('\x1b]9;4;2;100\x07')
 })
 
 test('notify unless the say mod says it', () => {

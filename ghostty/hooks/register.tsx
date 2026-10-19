@@ -6,7 +6,7 @@ import type { WorkspaceRow } from '../types'
 import {
   claudeSessions, matchSessions, progress, Progress, runningBar, shortFolder, shouldNotify, tabTitle, titleAction,
 } from './term'
-import type { Session, Todo } from './term'
+import type { Session } from './term'
 import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, withInclude } from './keybinds'
 import type { Binding } from './keybinds'
 import { asksPermission, badge, nextWaiting, parseEntry, rank } from './registry'
@@ -45,7 +45,6 @@ let tty = ''
 let pid = ''
 let summary = ''
 let titledAt = 0
-let todos: Todo[] = []
 let hasFailed = false
 let isRunning = false
 let isWaiting = false
@@ -135,7 +134,7 @@ let sentBar = ''
 
 async function drawBar($: EngineInterface) {
   if (!cfg.tabProgress) return
-  wantedBar = isWaiting ? progress(Progress.paused) : isRunning ? runningBar(todos, hasFailed) : progress(Progress.hide)
+  wantedBar = isWaiting ? progress(Progress.paused) : isRunning ? runningBar(hasFailed) : progress(Progress.hide)
   // Let the redraw that came with this change (a submitted prompt, a finished turn) finish first; the last call wins.
   // ponytail: a fixed delay only dodges that redraw, a spinner frame can still collide; no way to sync with Claude's renderer.
   await $.clock.sleep(150)
@@ -580,18 +579,11 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    todos = []
     hasFailed = false
     isRunning = true
     isWaiting = false
     waitingOn.clear()
     void Promise.all([drawTitle($), drawBar($), setStatus($, 'working').catch(() => {})])
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {
-    todos = e.todos.map(t => ({ status: t.status }))
-    void drawBar($)
     return next(e)
   }).catch(($, e, next) => next(e))
 

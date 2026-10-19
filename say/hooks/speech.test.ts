@@ -26,12 +26,8 @@ test('taskLine', () => {
 })
 
 test('checkinLine', () => {
-  expect(checkinLine([], 5)).toBe('Still working, 5 minutes in.')
-  expect(checkinLine([
-    { content: 'a', status: 'completed', activeForm: 'Doing a' },
-    { content: 'b', status: 'in_progress', activeForm: 'Writing the tests' },
-    { content: 'c', status: 'pending', activeForm: 'Doing c' },
-  ], 1)).toBe('Still working, 1 minute in. Writing the tests. 1 of 3 steps done.')
+  expect(checkinLine(5)).toBe('Still working, 5 minutes in.')
+  expect(checkinLine(1)).toBe('Still working, 1 minute in.')
 })
 
 test('rateLimitLine and voiceList', () => {

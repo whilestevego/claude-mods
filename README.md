@@ -79,8 +79,7 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
 - **Tab title:** a 4-word summary of what the session is about, from your last 10
   messages and Claude's latest reply, updated every few minutes as it goes. `/title` gets
   a new one right away. A resumed session gets its old title back.
-- **Tab progress bar:** shows while Claude works, fills in as its to-do list gets done,
-  and turns red when a command fails.
+- **Tab progress bar:** shows while Claude works, and turns red when a command fails.
 - **❓ waiting on you:** a ❓ in the tab title and a desktop notification when Claude
   needs a permission or an answer. If say is on, it speaks instead of notifying.
 - **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
