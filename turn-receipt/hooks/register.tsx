@@ -2,6 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Receipt } from '../types'
+// tldr's state contract, for the TL;DR this line carries: a renamed key there fails type-checking here.
+import type {} from '../../tldr/types'
 import { fullLine } from './receipt'
 
 const byDuration = atom({ plugin: 'turn-receipt', key: 'byDuration' } as const, {})
@@ -56,8 +58,7 @@ export const register: Register = on => {
     if (!receipt?.doneAt) return next(e) // receipts saved before doneAt existed keep the plain line
     const { Box, Text } = $.ui.resolve(e)
     // The tldr mod's line for this turn goes under the receipt: this hook replaces the line tldr would add it to.
-    const tldr = ((await $.state.get({ plugin: 'tldr', key: 'byDuration' } as never)) as { value?: Record<string, string> }).value
-    const summary = tldr?.[String(e.props.durationMs)]
+    const summary = (await $.state.get({ plugin: 'tldr', key: 'byDuration' })).value?.[String(e.props.durationMs)]
     const line = <Text dimColor>{fullLine(e.props.word, receipt)}</Text>
     if (!summary) return line
     return (
