@@ -3,6 +3,10 @@ import type { On } from 'claude-code'
 
 import { cleanLine, tldrPrompt } from './line'
 
+// The test environment has timers; the plugin typings (no DOM, no Node) just don't declare them.
+declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
+const settle = () => new Promise(r => setTimeout(r, 20))
+
 const long = 'Long reply. '.repeat(80)
 const done = (answer: string) => ({ answer, durationMs: 30_000, isAborted: false, turnId: 'turn-7', reason: 'answer' }) as never
 
@@ -38,6 +42,7 @@ test('a long reply gets a TL;DR under its closing line, published for the voice 
   on('ui.render', () => ({ type: 'Text', children: ['✻ Cooked for 30s'] }) as never)
   const r = await $.turn.complete(done(long))
   expect(r.text).toBe(long)  // the reply itself is untouched
+  await settle()
   expect(values.line?.value).toEqual({ turnId: 'turn-7', text: 'Built the tab progress bar.' })
   const ui = await $.ui.mount({ plugin: 'tldr', surface: 'terminal', component: 'TurnDuration', props: { word: 'Cooked', durationMs: 30_000 } as never })
   expect(await ui.find({ type: 'Text', text: /TL;DR: Built the tab progress bar\./ })).toBeDefined()
@@ -49,6 +54,7 @@ test('a short reply gets none, and says so for anyone waiting', async ($, on) =>
   on('model.complete', () => (calls++, { value: { isAnswered: true, text: 'x', usage: {} } }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   await $.turn.complete(done('Short.'))
+  await settle()
   expect(calls).toBe(0)
   expect(values.line?.value).toEqual({ turnId: 'turn-7', text: '' })
 })
@@ -59,6 +65,28 @@ test('not added twice when the line beneath already has it (turn-receipt drew it
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('ui.render', () => ({ type: 'Box', children: [{ type: 'Text', children: ['✻ Cooked'] }, { type: 'Text', children: ['  TL;DR: Once.'] }] }) as never)
   await $.turn.complete(done(long))
+  await settle()
   const ui = await $.ui.mount({ plugin: 'tldr', surface: 'terminal', component: 'TurnDuration', props: { word: 'Cooked', durationMs: 30_000 } as never })
   expect(JSON.stringify(await ui.drawn()).match(/TL;DR/g)).toHaveLength(1)
+})
+
+test("the turn completes without waiting for Haiku; the TL;DR follows when it answers", async ($, on) => {
+  const values = store(on)
+  let answer = (_: unknown) => {}
+  on('model.complete', () => new Promise(r => (answer = r)).then(() => ({ value: { isAnswered: true, text: 'Late line.', usage: {} } })) as never)
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  await $.turn.complete(done(long))
+  expect(values.line).toBeUndefined()
+  answer(undefined)
+  await settle()
+  expect(values.line?.value).toEqual({ turnId: 'turn-7', text: 'Late line.' })
+})
+
+test('a failed Haiku call still tells anyone waiting that there is no line', async ($, on) => {
+  const values = store(on)
+  on('model.complete', () => { throw new Error('offline') })
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  await $.turn.complete(done(long))
+  await settle()
+  expect(values.line?.value).toEqual({ turnId: 'turn-7', text: '' })
 })
