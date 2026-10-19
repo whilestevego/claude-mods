@@ -54,19 +54,13 @@ const submit = { text: 'Build the progress bar', origin: { kind: 'user' } } as n
 const asks = ($: { tool: { check(e: never): Promise<unknown> } }, id: string) => $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: id } as never)
 const done = { answer: 'Done.', durationMs: 5000, isAborted: false, turnId: 't', reason: 'answer' } as never
 
-test('a turn shows a busy bar, follows the todo list, and clears at the end', async ($, on) => {
+test('a turn shows a busy bar and clears it at the end', async ($, on) => {
   const clock = mock.clock(on)
   const w = machine(on)
   await $.session.start(start)
   await $.prompt.submit(submit)
   await settle(); await clock.advance(200)
   expect(w).toContain('\x1b]9;4;3\x07')
-  await $.tool.call({ tool: 'TodoWrite', todos: [
-    { content: 'a', status: 'completed', activeForm: 'A' },
-    { content: 'b', status: 'pending', activeForm: 'B' },
-  ] } as never)
-  await settle(); await clock.advance(200)
-  expect(w).toContain('\x1b]9;4;1;50\x07')
   await $.turn.complete(done)
   await settle(); await clock.advance(200)
   expect(w).toContain('\x1b]9;4;0\x07')

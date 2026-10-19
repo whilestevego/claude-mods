@@ -25,19 +25,9 @@ export function tabTitle(summary: string, isWaiting: boolean): string {
   return `${isWaiting ? '❓' : '✳'} ${summary || 'Claude Code'}`
 }
 
-export type Todo = { status: 'pending' | 'in_progress' | 'completed' }
-
-/** How far along Claude's todo list is, or undefined without one (an indeterminate bar then). */
-export function percentDone(todos: readonly Todo[]): number | undefined {
-  if (todos.length === 0) return undefined
-  return (todos.filter(t => t.status === 'completed').length / todos.length) * 100
-}
-
-/** The bar for a running turn: red after a failed tool call, else the todo list's progress, else busy. */
-export function runningBar(todos: readonly Todo[], hasFailed: boolean): string {
-  const pct = percentDone(todos)
-  if (hasFailed) return progress(Progress.error, pct ?? 100)
-  return pct === undefined ? progress(Progress.busy) : progress(Progress.value, pct)
+/** The bar for a running turn: red after a failed tool call, else busy. */
+export function runningBar(hasFailed: boolean): string {
+  return hasFailed ? progress(Progress.error, 100) : progress(Progress.busy)
 }
 
 /** Whether to post a notification when Claude waits on you: never twice, and not when the say mod will speak it. */

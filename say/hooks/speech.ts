@@ -53,15 +53,9 @@ export function errorLine(reason: string, answer: string): string {
   return first ? `Claude hit an error: ${first}` : 'Claude hit an error.'
 }
 
-export type Todo = { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm: string }
-
-/** The progress check-in: what's in progress and how far along the list is. */
-export function checkinLine(todos: readonly Todo[], minutes: number): string {
-  const elapsed = `Still working, ${minutes} minute${minutes === 1 ? '' : 's'} in.`
-  if (todos.length === 0) return elapsed
-  const done = todos.filter(t => t.status === 'completed').length
-  const now = todos.find(t => t.status === 'in_progress')
-  return `${elapsed} ${now ? `${now.activeForm}. ` : ''}${done} of ${todos.length} steps done.`
+/** The progress check-in during a long turn. */
+export function checkinLine(minutes: number): string {
+  return `Still working, ${minutes} minute${minutes === 1 ? '' : 's'} in.`
 }
 
 export function rateLimitLine(kind: string, percent: number): string {

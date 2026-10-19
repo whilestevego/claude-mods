@@ -1,7 +1,6 @@
 import type { EngineInterface, PluginOptions, Register, RenderNode } from 'claude-code'
 
 import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
-import type { Todo } from './speech'
 import { byGrade, claimVoice, matchVoice, parseCatalog, parseTable, weightedPick } from './voices'
 import type { VoiceInfo } from './voices'
 // tldr's state contract, for the line this mod speaks: a renamed key there fails type-checking here.
@@ -65,7 +64,6 @@ let picker: { voices: VoiceInfo[]; others: Set<string> } = { voices: [], others:
 let inGhostty = false
 let lastRequest = ''
 let lastAnswer = ''
-let todos: Todo[] = []
 let checkin: { cancel(): void } | undefined
 let turnStartedAt = 0
 /** Calls the permission check put to you, until they run or are refused. */
@@ -215,8 +213,7 @@ async function summarize($: EngineInterface, turnId: string, request: string, an
 }
 
 async function checkIn($: EngineInterface) {
-  const minutes = Math.round((Date.now() - turnStartedAt) / 60000)
-  await say($, checkinLine(todos, minutes))
+  await say($, checkinLine(Math.round((Date.now() - turnStartedAt) / 60000)))
 }
 
 function stopCheckins() {
@@ -305,7 +302,6 @@ export const register: Register = (on, options) => {
   // Every turn starts here: its request, a fresh todo list, and the check-in timer.
   on('prompt.submit', async ($, e, next) => {
     stopCheckins()
-    todos = []
     turnStartedAt = Date.now()
     if (e.origin.kind === 'task-notification') {
       if (cfg.backgroundTasks) void say($, taskLine(e.text))
@@ -313,11 +309,6 @@ export const register: Register = (on, options) => {
       lastRequest = e.text
     }
     if (cfg.checkins) checkin = $.clock.every(cfg.checkinMinutes * 60_000, () => void checkIn($))
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('tool.call', { tool: 'TodoWrite' }, ($, e, next) => {
-    todos = e.todos.map(t => ({ ...t }))
     return next(e)
   }).catch(($, e, next) => next(e))
 

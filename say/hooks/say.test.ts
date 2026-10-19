@@ -189,18 +189,14 @@ test('/say hush is kept in session state, which outlives a reload of the mod', a
   expect(writes).toContainEqual(expect.objectContaining({ plugin: 'say', key: 'muted', value: true }))
 })
 
-test('long turns check in with the todo in progress', { options: { checkinMinutes: 1 } }, async ($, on) => {
+test('long turns check in every few minutes', { options: { checkinMinutes: 1 } }, async ($, on) => {
   const clock = mock.clock(on)
   const spoken = machine(on, { tty: '' })
   await $.session.start(start)
   await $.prompt.submit({ text: 'Build it', origin: { kind: 'user' } } as never)
-  await $.tool.call({ tool: 'TodoWrite', todos: [
-    { content: 'a', status: 'completed', activeForm: 'Planning' },
-    { content: 'b', status: 'in_progress', activeForm: 'Writing the parser' },
-  ] } as never)
   await clock.advance(60_000)
   await settle()
-  expect(spoken.at(-1)?.at(-1)).toMatch(/^Still working, \d+ minutes? in\. Writing the parser\. 1 of 2 steps done\.$/)
+  expect(spoken.at(-1)?.at(-1)).toMatch(/^Still working, \d+ minutes? in\.$/)
 })
 
 test('with the tldr mod on, voice speaks its line and makes no Haiku call of its own', async ($, on) => {
