@@ -456,9 +456,15 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // Claude exits: clear the bar.
+  // Claude exits: clear the bar. /clear ends the conversation but not Claude, and no session.start follows:
+  // drop the old topic from the tab and let the next finished turn title the new one.
   on('session.end', async ($, e, next) => {
     if (cfg.tabProgress) await send($, progress(Progress.hide))
+    if (e.reason === 'clear') {
+      summary = ''
+      titledAt = 0
+      await drawTitle($)
+    }
     return next(e)
   })
 

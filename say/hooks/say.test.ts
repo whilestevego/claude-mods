@@ -8,6 +8,9 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  * Fakes the machine: Claude on ttys004 (pid 4242) in Ghostty, `focused` deciding what osascript reports,
  * `files` the disk, `alive` which other sessions still run.
  */
+/** The conversation this session is on; /clear starts a new one. */
+const conversation = { id: '' }
+
 function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, alive: string[] = [], store: Record<string, unknown> = {}) {
   const spoken: string[][] = []
   /** What reached the speakers, in order: 'chime' or 'speech'. */
@@ -36,7 +39,8 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('store.get', (_$, e) => ({ value: store[e.key] }) as never)
   on('store.set', (_$, e) => ((store[e.key] = e.value), { value: undefined }) as never)
   on('command.register', () => ({ value: {} }) as never)
-  on('session.id', () => ({ value: 'aaaaaaaa-1111-2222-3333-444444444444' }) as never)
+  conversation.id = 'aaaaaaaa-1111-2222-3333-444444444444'
+  on('session.id', () => ({ value: conversation.id }) as never)
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
   on('ui.close', () => ({ value: {} }) as never)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -46,6 +50,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('tool.call', () => ({ result: {}, text: '' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
+  on('session.end', () => ({ sessionId: conversation.id }) as never)
   return Object.assign(spoken, { heard })
 }
 
@@ -187,6 +192,18 @@ test('/say hush is kept in session state, which outlives a reload of the mod', a
   await $.session.start(start)
   await $.command.run({ command: 'say', args: 'hush' } as never)
   expect(writes).toContainEqual(expect.objectContaining({ plugin: 'say', key: 'muted', value: true }))
+})
+
+test('after /clear the chosen voice is saved under the new conversation', async ($, on) => {
+  const files: Record<string, string> = {}
+  machine(on, { tty: '' }, files)
+  await $.session.start(start)
+  await $.command.run({ command: 'say', args: 'pick emma' } as never)
+  await $.session.end({ reason: 'clear' } as never)
+  conversation.id = 'cccccccc-1111-2222-3333-444444444444'
+  await $.prompt.submit({ text: 'Next', origin: { kind: 'user' } } as never)
+  await settle()
+  expect(files[`/home/me/Library/Caches/claude-say/chosen/${conversation.id}`]).toBe('bf_emma')
 })
 
 test('long turns check in every few minutes', { options: { checkinMinutes: 1 } }, async ($, on) => {

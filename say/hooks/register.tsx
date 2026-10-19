@@ -57,6 +57,8 @@ let home = ''
 let sessionVoice = ''
 /** The voice you picked with /say for this conversation: wins over the session's own and the fixed one. */
 let chosen = ''
+/** After /clear: the chosen voice is saved again under the new conversation at the next prompt. */
+let isChosenStale = false
 /** What the /say picker lists: murmur's voices, and the ones other sessions hold. */
 const PICKER = 'claude-say-picker'
 const currentVoice = () => chosen || cfg.voice || sessionVoice || 'af_heart'
@@ -129,13 +131,16 @@ async function chosenFile($: EngineInterface): Promise<string | undefined> {
   return home && /^[0-9a-f-]{8,64}$/i.test(id) ? `${home}/Library/Caches/claude-say/chosen/${id}` : undefined
 }
 
+async function saveChosen($: EngineInterface) {
+  const file = await chosenFile($)
+  if (!file) return
+  await $.process.run(['mkdir', '-p', file.replace(/\/[^/]*$/, '')])
+  await $.fs.write(file, chosen)
+}
+
 async function choose($: EngineInterface, v: VoiceInfo): Promise<string> {
   chosen = v.id
-  const file = await chosenFile($)
-  if (file) {
-    await $.process.run(['mkdir', '-p', file.replace(/\/[^/]*$/, '')])
-    await $.fs.write(file, v.id)
-  }
+  await saveChosen($)
   await claimSessionVoice($).catch(() => {})
   void say($, sample(v.name), true)
   return `🔊 This session now speaks as ${v.name} (${v.id}).` + (v.isInstalled ? '' : ' It installs on first use, so the first line may take a moment.')
@@ -303,6 +308,8 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     stopCheckins()
     turnStartedAt = Date.now()
+    if (isChosenStale && chosen) void saveChosen($).catch(() => {})
+    isChosenStale = false
     if (e.origin.kind === 'task-notification') {
       if (cfg.backgroundTasks) void say($, taskLine(e.text))
     } else {
@@ -361,6 +368,12 @@ export const register: Register = (on, options) => {
         for (const w of fresh) void say($, rateLimitLine(w.kind, w.percentUsed))
       }
     }
+    return next(e)
+  })
+
+  // /clear starts a new conversation in this same session (no session.start follows): it keeps the voice.
+  on('session.end', ($, e, next) => {
+    if (e.reason === 'clear') isChosenStale = true
     return next(e)
   })
 

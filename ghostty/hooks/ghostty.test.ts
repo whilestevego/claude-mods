@@ -126,6 +126,17 @@ test("a question keeps the ❓ until it's answered", async ($, on) => {
   expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
 })
 
+test('/clear drops the old topic from the tab', async ($, on) => {
+  const clock = mock.clock(on)
+  const w = machine(on)
+  await $.session.start(start)
+  await settle(); await clock.advance(200)
+  expect(w.filter(s => s.startsWith('set_surface_title:')).at(-1)).toBe('set_surface_title:✳ Tab Progress Bar')
+  await $.session.end({ reason: 'clear' } as never)
+  await settle()
+  expect(w.filter(s => s.startsWith('set_surface_title:')).at(-1)).toBe('set_surface_title:✳ Claude Code')
+})
+
 test('auto mode approving a call that asks is not waiting on you', async ($, on) => {
   const clock = mock.clock(on)
   const w = machine(on)
