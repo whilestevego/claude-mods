@@ -9,6 +9,9 @@ while [ "$p" -gt 1 ]; do
   case "$t" in ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;; *) printf '\\033]22;%s\\033\\\\' "$1" > "/dev/$t"; exit ;; esac
 done`
 
+let wantedPointer = 'default'
+let sentPointer = 'default'
+
 const copied = atom({ plugin: 'session-id', key: 'copied' } as const, false)
 
 export const register: Register = on => {
@@ -30,7 +33,14 @@ export const register: Register = on => {
   // sid.tsx posts hovers and clicks here, where $ can reach the tty and the clipboard.
   on('ui.message', { element: 'session-id' }, async ($, e, next) => {
     if (e.data === 'enter' || e.data === 'leave') {
-      await $.process.run(['sh', '-c', SET_POINTER, 'sh', e.data === 'enter' ? 'pointer' : 'default'])
+      // The hover redraws the id (its underline turns blue) at this very moment, and bytes written to the tty mid-frame
+      // garble the screen, so let that redraw finish first. The last hover wins; a quick enter-leave writes nothing.
+      wantedPointer = e.data === 'enter' ? 'pointer' : 'default'
+      await $.clock.sleep(100)
+      if (wantedPointer !== sentPointer) {
+        sentPointer = wantedPointer
+        await $.process.run(['sh', '-c', SET_POINTER, 'sh', sentPointer])
+      }
       return next(e)
     }
     const id = await $.session.id()
