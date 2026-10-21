@@ -58,6 +58,10 @@ tab in front), so it never interrupts you while you're watching.
 - **Clicking a notification** in Ghostty brings you to the tab of the session that sent it.
   Each one is titled with the session's folder, so you can tell sessions apart.
 - Without say, `voice` alerts are skipped and the banners still go out.
+- **`/notify test`** sends a desktop notification right away, so you can check they show
+  up. macOS can't tell a mod whether a terminal may show notifications, so this is the way to
+  check. **`/notify settings`** opens the switch in System Settings (Ghostty's own entry, in
+  Ghostty). The first time notify starts, it reminds you once to run `/notify test`.
 
 ### say
 
