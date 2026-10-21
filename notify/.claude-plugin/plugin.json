@@ -1,0 +1,109 @@
+{
+  "name": "notify",
+  "version": "0.1.0",
+  "description": "Tells you when Claude needs you, finishes a long turn, nears a rate limit, finishes a background task or is still working: as a desktop notification (clicking it brings you to the session's tab) and, with the say mod, out loud",
+  "author": {
+    "name": "Steve Godin",
+    "url": "https://github.com/whilestevego"
+  },
+  "userConfig": {
+    "when": {
+      "type": "string",
+      "title": "Alert when",
+      "description": "away: only when this terminal isn't the focused one (Ghostty; elsewhere, always). always: whenever something happens",
+      "options": [
+        "away",
+        "always"
+      ],
+      "default": "away"
+    },
+    "needsYou": {
+      "type": "string",
+      "title": "Needs you",
+      "description": "Claude needs permission, asks a question, or stops on an API error. banner: a desktop notification. voice: spoken by the say mod",
+      "options": [
+        "both",
+        "banner",
+        "voice",
+        "off"
+      ],
+      "default": "both"
+    },
+    "turnDone": {
+      "type": "string",
+      "title": "Long turn finished",
+      "description": "A one-line summary of what a long turn did",
+      "options": [
+        "both",
+        "banner",
+        "voice",
+        "off"
+      ],
+      "default": "both"
+    },
+    "rateLimit": {
+      "type": "string",
+      "title": "Rate-limit warning",
+      "description": "Once per usage window, when it passes the threshold",
+      "options": [
+        "both",
+        "banner",
+        "voice",
+        "off"
+      ],
+      "default": "both"
+    },
+    "backgroundTasks": {
+      "type": "string",
+      "title": "Background task finished",
+      "options": [
+        "both",
+        "banner",
+        "voice",
+        "off"
+      ],
+      "default": "voice",
+      "description": "A background task Claude started has finished"
+    },
+    "checkins": {
+      "type": "string",
+      "title": "Progress check-ins",
+      "description": "During long turns, say what's in progress",
+      "options": [
+        "both",
+        "banner",
+        "voice",
+        "off"
+      ],
+      "default": "voice"
+    },
+    "summaryStyle": {
+      "type": "string",
+      "title": "Summary style",
+      "description": "haiku: a one-line summary written by Claude Haiku (a tiny API call), or the tldr mod's line when it's on. first-sentence: the answer's first sentence, free",
+      "options": [
+        "haiku",
+        "first-sentence"
+      ],
+      "default": "haiku"
+    },
+    "minTurnSeconds": {
+      "type": "number",
+      "title": "Long turn (seconds)",
+      "description": "Turns shorter than this finish without an alert",
+      "default": 20
+    },
+    "checkinMinutes": {
+      "type": "number",
+      "title": "Check-in every (minutes)",
+      "default": 5,
+      "description": "How often a long turn checks in"
+    },
+    "rateLimitPercent": {
+      "type": "number",
+      "title": "Rate-limit threshold (%)",
+      "default": 90,
+      "description": "Warn when a usage window passes this"
+    }
+  }
+}

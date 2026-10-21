@@ -42,16 +42,29 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 - Nothing to do. **TL;DR: long reply** in `/config` sets how long a reply must be
   (600 characters by default).
 
+### notify
+
+Tells you when something happens in a session: as a desktop notification, out loud
+through say, or both. It only tells you when you're away from the session (another app or
+tab in front), so it never interrupts you while you're watching.
+
+- **What it tells you about:** Claude needs your permission or has a question, or a turn
+  stopped on an API error (like a lost connection); a long turn finished, with a one-line
+  summary of what it did; you're close to a usage limit; a background task finished; and
+  every few minutes, how a long turn is going.
+- **Where each one goes:** each event has its own setting in `/config` under **notify**:
+  `both`, `banner` (the desktop notification), `voice` (spoken by say) or `off`. By default
+  the first three are `both`, and background tasks and check-ins are `voice`.
+- **Clicking a notification** in Ghostty brings you to the tab of the session that sent it.
+  Each one is titled with the session's folder, so you can tell sessions apart.
+- Without say, `voice` alerts are skipped and the banners still go out.
+
 ### say
 
-Gives Claude a voice, through [murmur](https://github.com/whilestevego/murmur). It speaks
-only when you're away from the session (another app or tab in front), so it never talks
-over you while you're watching.
+Gives Claude a voice, through [murmur](https://github.com/whilestevego/murmur). The notify
+mod decides what gets said and when; say is the voice it speaks in. Other mods can speak
+through it too, with `$.voice.say({ text })`.
 
-- It says what a long turn did, when Claude needs your permission or has a question,
-  when a turn stops on an API error (like a lost connection), when a background task
-  finishes, how a long task is going every few minutes, and when you're close to a usage
-  limit.
 - A soft chime plays before it speaks, so a voice never starts out of nowhere. Turn it
   off with **Chime** in `/config`.
 - Each open session gets its own voice: the best one no other session has, by Kokoro's
@@ -80,8 +93,8 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
   messages and Claude's latest reply, updated every few minutes as it goes. `/title` gets
   a new one right away. A resumed session gets its old title back.
 - **Tab progress bar:** shows while Claude works, and turns red when a command fails.
-- **❓ waiting on you:** a ❓ in the tab title and a desktop notification when Claude
-  needs a permission or an answer. If say is on, it speaks instead of notifying.
+- **❓ waiting on you:** a ❓ in the tab title when Claude needs a permission or an answer.
+  The notify mod sends the notification.
 - **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
 - **`/goto`** lists your open Claude sessions, the ones waiting on you first,
   and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;
@@ -126,7 +139,7 @@ Install the mods you want, one line each, at the prompt of a Claude Code session
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`,
-`rate-limits`, `session-id`, `turn-receipt`, `tldr`, `say` and `ghostty`.
+`rate-limits`, `session-id`, `turn-receipt`, `tldr`, `notify`, `say` and `ghostty`.
 
 ### From a clone, while working on them
 

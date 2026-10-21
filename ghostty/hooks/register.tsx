@@ -4,7 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { WorkspaceRow } from '../types'
 
 import {
-  claudeSessions, matchSessions, progress, Progress, runningBar, shortFolder, shouldNotify, tabTitle, titleAction,
+  claudeSessions, matchSessions, progress, Progress, runningBar, shortFolder, tabTitle, titleAction,
 } from './term'
 import type { Session } from './term'
 import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, withInclude } from './keybinds'
@@ -23,7 +23,6 @@ type Config = {
   titleMinutes: number
   tabProgress: boolean
   waitingBadge: boolean
-  waitingNotification: string
   keybinds: boolean
 }
 
@@ -33,7 +32,6 @@ function config(o: PluginOptions): Config {
     titleMinutes: typeof o.titleMinutes === 'number' && o.titleMinutes > 0 ? o.titleMinutes : 3,
     tabProgress: o.tabProgress !== false,
     waitingBadge: o.waitingBadge !== false,
-    waitingNotification: o.waitingNotification === 'always' || o.waitingNotification === 'never' ? o.waitingNotification : 'auto',
     keybinds: o.keybinds === true,
   }
 }
@@ -143,18 +141,11 @@ async function drawBar($: EngineInterface) {
   await send($, sentBar)
 }
 
-/** The say mod speaks "needs you" itself when it's loaded with that setting on. */
-async function voiceSpeaksIt($: EngineInterface): Promise<boolean> {
-  const rows = await $.config.list().catch(() => [])
-  return rows.some(r => r.key === 'say.needsYou' && r.value === true)
-}
-
-async function waitOnYou($: EngineInterface, id: string, why: string) {
+async function waitOnYou($: EngineInterface, id: string) {
   waitingOn.add(id)
   isWaiting = true
   void setStatus($, 'waiting').catch(() => {})
   await Promise.all([drawTitle($), drawBar($)])
-  if (shouldNotify(cfg.waitingNotification, await voiceSpeaksIt($))) await $.ui.notify(why, { title: 'Claude Code' }).catch(() => null)
 }
 
 /**
@@ -162,13 +153,13 @@ async function waitOnYou($: EngineInterface, id: string, why: string) {
  * record waiting, so watch it while the call is pending. Mods hear neither classic.PermissionRequest nor
  * classic.Notification while a dialog is up (checked on 2.1.301), so this file is the only sign.
  */
-async function watchForDialog($: EngineInterface, id: string, why: string) {
+async function watchForDialog($: EngineInterface, id: string) {
   asking.add(id)
   // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
   for (let i = 0; i < 1200; i++) {
     await $.clock.sleep(500)
     if (!asking.has(id)) return
-    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) return waitOnYou($, id, why)
+    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) return waitOnYou($, id)
   }
 }
 
@@ -607,7 +598,7 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
-    if (e.tool_use_id) void waitOnYou($, e.tool_use_id, 'Claude has a question for you')
+    if (e.tool_use_id) void waitOnYou($, e.tool_use_id)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -628,7 +619,7 @@ export const register: Register = (on, options) => {
 
   on('tool.check', async ($, e, next) => {
     const r = await next(e)
-    if (r.decision === 'ask' && e.tool_use_id) void watchForDialog($, e.tool_use_id, `Claude needs your permission to use ${e.tool}`).catch(() => {})
+    if (r.decision === 'ask' && e.tool_use_id) void watchForDialog($, e.tool_use_id).catch(() => {})
     return r
   }).catch(($, e, next) => next(e))
 

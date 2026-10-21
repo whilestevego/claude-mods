@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import {
-  claudeSessions, matchSessions, progress, Progress, runningBar, safe, shortFolder, shouldNotify, tabTitle, titleAction,
+  claudeSessions, matchSessions, progress, Progress, runningBar, safe, shortFolder, tabTitle, titleAction,
 } from './term'
 
 test('sequences', () => {
@@ -26,14 +26,6 @@ test('the running bar is busy, and red after a failure', () => {
   expect(runningBar(false)).toBe('\x1b]9;4;3\x07')
   expect(runningBar(true)).toBe('\x1b]9;4;2;100\x07')
 })
-
-test('notify unless the say mod says it', () => {
-  expect(shouldNotify('auto', false)).toBe(true)
-  expect(shouldNotify('auto', true)).toBe(false)
-  expect(shouldNotify('always', true)).toBe(true)
-  expect(shouldNotify('never', false)).toBe(false)
-})
-
 
 test('Claude sessions from Ghostty terminals and ps', () => {
   const terms = 'A\t/dev/ttys000\t✳ Plan review\t/u/redouble\nB\t/dev/ttys001\t~/hobby\t/u/hobby\nC\t/dev/ttys004\t✳ Murmur Mods\t/u/.claude\n'

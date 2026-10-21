@@ -14,7 +14,12 @@
     {
       "name": "ghostty",
       "source": "./ghostty",
-      "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ and a notification when Claude waits on you, /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude"
+      "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ when Claude waits on you (the notify mod sends the notification), /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude"
+    },
+    {
+      "name": "notify",
+      "source": "./notify",
+      "description": "Tells you when Claude needs you, finishes a long turn, nears a rate limit, finishes a background task or is still working: as a desktop notification (clicking it brings you to the session's tab) and, with the say mod, out loud"
     },
     {
       "name": "rate-limits",
@@ -24,7 +29,7 @@
     {
       "name": "say",
       "source": "./say",
-      "description": "Claude Code speaks through murmur (Kokoro on the Apple Neural Engine): turn summaries, needs-you alerts, background tasks, progress check-ins and rate-limit warnings, each session in its own voice (/say picks one)"
+      "description": "Claude Code's voice, through murmur (Kokoro on the Apple Neural Engine): each session in its own voice (/say picks one), /say read and /say tldr, and $.voice.say for other mods; the notify mod decides what gets said"
     },
     {
       "name": "session-id",

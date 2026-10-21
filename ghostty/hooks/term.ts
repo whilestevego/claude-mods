@@ -30,11 +30,6 @@ export function runningBar(hasFailed: boolean): string {
   return hasFailed ? progress(Progress.error, 100) : progress(Progress.busy)
 }
 
-/** Whether to post a notification when Claude waits on you: never twice, and not when the say mod will speak it. */
-export function shouldNotify(setting: string, voiceSpeaksIt: boolean): boolean {
-  return setting === 'always' || (setting === 'auto' && !voiceSpeaksIt)
-}
-
 // ─── /goto ───────────────────────────────────────────────────────────────────
 
 export type Session = { id: string; tty: string; title: string; folder: string; isMe: boolean }

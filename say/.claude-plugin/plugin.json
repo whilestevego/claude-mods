@@ -1,86 +1,18 @@
 {
   "name": "say",
-  "version": "0.3.0",
-  "description": "Claude Code speaks through murmur (Kokoro on the Apple Neural Engine): turn summaries, needs-you alerts, background tasks, progress check-ins and rate-limit warnings, each session in its own voice (/say picks one)",
+  "version": "0.4.0",
+  "description": "Claude Code's voice, through murmur (Kokoro on the Apple Neural Engine): each session in its own voice (/say picks one), /say read and /say tldr, and $.voice.say for other mods; the notify mod decides what gets said",
   "author": {
     "name": "Steve Godin",
     "url": "https://github.com/whilestevego"
   },
   "types": "./types/index.d.ts",
   "userConfig": {
-    "speakWhen": {
-      "type": "string",
-      "title": "Speak when",
-      "description": "away: only when this terminal isn't the focused one (Ghostty; elsewhere, always). always: whenever something happens",
-      "options": [
-        "away",
-        "always"
-      ],
-      "default": "away"
-    },
-    "turnSummaries": {
-      "type": "boolean",
-      "title": "Turn summaries",
-      "description": "Say what a long turn did when it finishes",
-      "default": true
-    },
-    "summaryStyle": {
-      "type": "string",
-      "title": "Summary style",
-      "description": "haiku: a one-line summary written by Claude Haiku (a tiny API call). first-sentence: the answer's first sentence, free",
-      "options": [
-        "haiku",
-        "first-sentence"
-      ],
-      "default": "haiku"
-    },
-    "minTurnSeconds": {
-      "type": "number",
-      "title": "Long turn (seconds)",
-      "description": "Turns shorter than this finish without a summary",
-      "default": 20
-    },
     "chime": {
       "type": "boolean",
       "title": "Chime",
       "description": "Play a soft chime before speaking",
       "default": true
-    },
-    "needsYou": {
-      "type": "boolean",
-      "title": "Needs you",
-      "description": "Say when Claude needs permission, asks a question, or stops on an API error",
-      "default": true
-    },
-    "backgroundTasks": {
-      "type": "boolean",
-      "title": "Background tasks",
-      "description": "Say when a background task finishes",
-      "default": true
-    },
-    "checkins": {
-      "type": "boolean",
-      "title": "Progress check-ins",
-      "description": "During long turns, say what's in progress",
-      "default": true
-    },
-    "checkinMinutes": {
-      "type": "number",
-      "title": "Check-in every (minutes)",
-      "description": "How often a long turn checks in",
-      "default": 5
-    },
-    "rateLimitWarnings": {
-      "type": "boolean",
-      "title": "Rate-limit warnings",
-      "description": "Warn once per usage window when it passes the threshold",
-      "default": true
-    },
-    "rateLimitPercent": {
-      "type": "number",
-      "title": "Rate-limit threshold (%)",
-      "description": "Warn when a usage window passes this",
-      "default": 90
     },
     "speed": {
       "type": "number",
