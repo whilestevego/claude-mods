@@ -39,7 +39,7 @@
     {
       "name": "tldr",
       "source": "./tldr",
-      "description": "A one-line TL;DR under Claude's long replies, written by Claude Haiku; the say mod speaks the same line"
+      "description": "A one-line TL;DR under Claude's long replies, written by Claude Haiku; the notify mod uses the same line as its turn summary"
     },
     {
       "name": "turn-receipt",

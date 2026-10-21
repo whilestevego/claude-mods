@@ -17,7 +17,7 @@ async function summarize($: EngineInterface, turnId: string, durationMs: number,
     // ponytail: two turns with the same durationMs share a TL;DR; key by a real turn id if the line ever carries one.
     await update($, byDuration, all => Object.fromEntries([...Object.entries(all), [String(durationMs), text]].slice(-500)))
   }
-  // Published for other mods (say speaks this same line). Empty text: nothing to wait for. Only tldr writes it.
+  // Published for other mods (notify uses this same line as its turn summary). Empty text: nothing to wait for. Only tldr writes it.
   await $.state.set({ plugin: 'tldr', key: 'line' }, { turnId, text })
 }
 

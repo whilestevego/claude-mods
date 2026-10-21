@@ -4,6 +4,11 @@ Mods for Claude Code: small plugins that add to its screen and behavior. Each fo
 one mod. Turn on the ones you want (see [Setup](#setup)) and change their settings in
 `/config`, under the mod's name.
 
+Each mod works on its own, and a few work better together. **notify** tells you when
+something happens; with **say** it can tell you out loud, with **tldr** its turn summaries
+reuse tldr's line instead of writing their own, and in **Ghostty** clicking its notification
+brings you back to the session's tab.
+
 ## The mods
 
 ### context-bar
@@ -17,7 +22,8 @@ Shows how full Claude's context window is, as a colored bar above the prompt.
 
 Shows how much of your 5-hour and weekly usage limits you've used, as two small meters
 under the context bar. They turn yellow at 70% and red at 90%, and you get a warning
-once a limit passes 90%.
+inside Claude once a limit passes 90%. (notify also warns, as a desktop notification or out
+loud, at a threshold you set.)
 
 - Nothing to do: it appears on its own when you're on a subscription plan.
 
@@ -41,12 +47,14 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 
 - Nothing to do. **TL;DR: long reply** in `/config` sets how long a reply must be
   (600 characters by default).
+- With notify on, the same line is its summary when a long turn finishes, at no extra cost.
 
 ### notify
 
 Tells you when something happens in a session: as a desktop notification, out loud
-through say, or both. It only tells you when you're away from the session (another app or
-tab in front), so it never interrupts you while you're watching.
+through say, or both. In Ghostty it only tells you when you're away from the session
+(another app or tab in front), so it never interrupts you while you're watching. In other
+terminals it can't tell, so it always tells you.
 
 - **What it tells you about:** Claude needs your permission or has a question, or a turn
   stopped on an API error (like a lost connection); a long turn finished, with a one-line
@@ -58,16 +66,16 @@ tab in front), so it never interrupts you while you're watching.
 - **Clicking a notification** in Ghostty brings you to the tab of the session that sent it.
   Each one is titled with the session's folder, so you can tell sessions apart.
 - Without say, `voice` alerts are skipped and the banners still go out.
-- **`/notify test`** sends a desktop notification right away, so you can check they show
-  up. macOS can't tell a mod whether a terminal may show notifications, so this is the way to
-  check. **`/notify settings`** opens the switch in System Settings (Ghostty's own entry, in
-  Ghostty). The first time notify starts, it reminds you once to run `/notify test`.
+
+| Command | What it does |
+|---|---|
+| `/notify test` | Sends a desktop notification right away. macOS can't tell a mod whether your terminal may show notifications, so this is how to check. The first time notify starts, it reminds you once. |
+| `/notify settings` | Opens the switch in System Settings: Ghostty's own entry in Ghostty, the Notifications list elsewhere. |
 
 ### say
 
 Gives Claude a voice, through [murmur](https://github.com/whilestevego/murmur). The notify
-mod decides what gets said and when; say is the voice it speaks in. Other mods can speak
-through it too, with `$.voice.say({ text })`.
+mod decides what gets said and when; say is the voice it speaks in.
 
 - A soft chime plays before it speaks, so a voice never starts out of nowhere. Turn it
   off with **Chime** in `/config`.
@@ -168,17 +176,24 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
   overwrite the tab title.
 - **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
+- **notify**'s desktop notifications need notifications allowed for your terminal, in
+  System Settings → Notifications (Ghostty, say). `/notify test` checks; `/notify settings`
+  opens the page.
 - **session-id**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 
 The first time a mod controls Ghostty, macOS asks for permission. Allow it.
 
 ## Development
 
-Editing a mod's files reloads it in running sessions.
+Editing a mod's files reloads it in running sessions. A mod newly added to
+`CLAUDE_CODE_PLUGIN_DIRS` loads only in sessions started after that.
 
 ```sh
 claude plugin validate context-bar   # check a mod the way Claude Code will load it
 claude plugin test context-bar       # run its tests
 ```
+
+Mods can call each other through nouns on `$`: say adds `$.voice.say({ text })`, which
+notify speaks through. Its types are in `say/types/index.d.ts`.
 
 [IDEAS.md](IDEAS.md) has ideas for more mods.
