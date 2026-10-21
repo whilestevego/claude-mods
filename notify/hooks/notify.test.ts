@@ -8,7 +8,7 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  * Fakes the machine: Claude on ttys004 (pid 4242) in Ghostty, `focused` deciding what osascript reports, `files`
  * the disk. What reached you comes back in order, as "banner:<title>|<text>" or "voice:<text>".
  */
-function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = {}, hasVoice = true) {
+function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true) {
   const told: string[] = []
   on('ui.notify', (_$, e) => (told.push(`banner:${e.title}|${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
   // Stands in for the say mod: it provides $.voice and answers voice.say.
@@ -21,6 +21,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
     if (argv[0] === 'sh') return out('ttys004 4242\n')
     if (argv[0] === 'osascript') return out(focused.tty)
+    if (argv[0] === 'open') told.push(`open:${argv[1]}`)
     return out('')
   })
   on('fs.read', (_$, e) => {
@@ -36,6 +37,8 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('tool.call', () => ({ result: {}, text: '' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
+  on('command.register', () => ({ value: {} }) as never)
+  on('ui.toast', (_$, e) => (told.push(`toast:${e.text}`), { value: undefined }) as never)
   return told
 }
 
@@ -129,7 +132,7 @@ test('a rate limit is warned about once per window', { options: { rateLimit: 'ba
 })
 
 test('a limit another session already warned about is not told again', async ($, on) => {
-  const told = machine(on, { tty: '' }, {}, { warnedLimits: ['five_hour@R1'] })
+  const told = machine(on, { tty: '' }, {}, { warnedLimits: ['five_hour@R1'], hintedTest: true })
   await $.session.start(start)
   await $.session.measure({ context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 95, resetsAt: 'R1' }], changed: ['rateLimits'] } as never)
   await settle()
@@ -171,9 +174,37 @@ test('when tldr has no line for the turn, Haiku writes one', { options: { turnDo
 })
 
 test('without the say mod, banners still go out and voice lines are dropped', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
-  const told = machine(on, { tty: '' }, {}, {}, false)
+  const told = machine(on, { tty: '' }, {}, { hintedTest: true }, false)
   await $.session.start(start)
   await $.turn.complete(turn(60_000, 'Shipped it.'))
   await settle()
   expect(told).toEqual([`banner:${TITLE}|Shipped it.`])
+})
+
+test('/notify test sends a banner at once, even while this terminal is focused', async ($, on) => {
+  const told = machine(on, { tty: '/dev/ttys004' })
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'notify', args: 'test' } as never)).text).toContain('/notify settings')
+  expect(told).toEqual([`banner:${TITLE}|This is what notify alerts look like. Click it to come back to this tab.`])
+})
+
+test("/notify settings opens Ghostty's notification settings", async ($, on) => {
+  const told = machine(on, { tty: '' })
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'notify', args: 'settings' } as never)).text).toContain('for Ghostty')
+  expect(told).toEqual(['open:x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.mitchellh.ghostty'])
+})
+
+test('the first start hints at /notify test, once across sessions', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const told = machine(on, { tty: '' }, {}, store)
+  await $.session.start(start)
+  await $.session.start(start)
+  expect(told).toEqual(['toast:notify: run /notify test to check desktop notifications show up'])
+})
+
+test('no hint when no event sends banners', { options: { needsYou: 'voice', turnDone: 'voice', rateLimit: 'off' } }, async ($, on) => {
+  const told = machine(on, { tty: '' }, {}, {})
+  await $.session.start(start)
+  expect(told).toEqual([])
 })

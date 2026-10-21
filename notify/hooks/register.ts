@@ -37,6 +37,17 @@ function config(o: PluginOptions): Config {
 
 /** Rate-limit windows already warned about, as "kind@resetsAt": in $.store, so one warning covers every session. */
 const WARNED = 'warnedLimits'
+/** Set once the /notify test hint has been shown: in $.store, so it shows once, not once per session. */
+const HINTED = 'hintedTest'
+
+/** System Settings' Notifications page: Ghostty's own entry in Ghostty, the whole list elsewhere. */
+const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension'
+const GHOSTTY_ID = 'com.mitchellh.ghostty'
+
+const HELP = [
+  '/notify test      send a desktop notification now, to check they show up',
+  "/notify settings  open your terminal's notification settings",
+].join('\n')
 
 // The module's own session state; a reload starts it over.
 let cfg: Config
@@ -90,8 +101,7 @@ async function isAway($: EngineInterface): Promise<boolean> {
  */
 async function alert($: EngineInterface, to: Channel, text: string) {
   if (to === 'off' || !text.trim() || !(await isAway($))) return
-  const title = folder ? `Claude Code · ${folder}` : 'Claude Code'
-  await Promise.all([to !== 'voice' && $.ui.notify(text, { title }).catch(() => null), to !== 'banner' && speak($, text)])
+  await Promise.all([to !== 'voice' && $.ui.notify(text, { title: title() }).catch(() => null), to !== 'banner' && speak($, text)])
 }
 
 /** Says `text` in this session's voice. Without the say mod there's no $.voice, and the line goes unsaid. */
@@ -153,6 +163,25 @@ async function summarize($: EngineInterface, turnId: string, request: string, an
   return line && line.length <= 200 ? line : firstSentence(answer)
 }
 
+/**
+ * macOS can't tell a mod whether it shows the terminal's notifications (Notification Center's prefs are undocumented
+ * and lag behind the toggle), so the reliable check is to send one and look.
+ */
+async function testBanner($: EngineInterface): Promise<{ text: string }> {
+  const sent = await $.ui.notify('This is what notify alerts look like. Click it to come back to this tab.', { title: title() })
+  if (!sent.isSent) return { text: `Couldn't send a notification (${sent.reason}).` }
+  return { text: "🔔 Sent. Didn't see a banner? /notify settings opens the switch for it." }
+}
+
+async function openSettings($: EngineInterface): Promise<{ text: string }> {
+  const r = await $.process.run(['open', inGhostty ? `${SETTINGS}?id=${GHOSTTY_ID}` : SETTINGS])
+  if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
+  return { text: `Opened System Settings. Turn on Allow notifications${inGhostty ? ' for Ghostty' : ''}, then /notify test.` }
+}
+
+const title = () => (folder ? `Claude Code · ${folder}` : 'Claude Code')
+const sendsBanners = () => [cfg.needsYou, cfg.turnDone, cfg.rateLimit, cfg.backgroundTasks, cfg.checkins].some(c => c === 'both' || c === 'banner')
+
 function stopCheckins() {
   checkin?.cancel()
   checkin = undefined
@@ -165,7 +194,20 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
+    await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test to check they show up, /notify settings to turn them on' })
+    if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
+      await $.store.set(HINTED, true)
+      $.ui.toast('notify: run /notify test to check desktop notifications show up')
+    }
     return next(e)
+  })
+
+  on('command.run', { command: 'notify' }, async ($, e) => {
+    switch (e.args.trim().toLowerCase()) {
+      case 'test': return testBanner($)
+      case 'settings': return openSettings($)
+      default: return { text: HELP }
+    }
   })
 
   // Every turn starts here: its request, and the check-in timer.
