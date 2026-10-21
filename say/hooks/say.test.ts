@@ -1,4 +1,4 @@
-import { test, expect, mock } from 'claude-code/testing'
+import { test, expect } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 // The test environment has timers; the plugin typings (no DOM, no Node) just don't declare them.
@@ -66,40 +66,22 @@ const TABLE = '/home/me/Library/Caches/claude-say/voices.json'
 const start = { cwd: '/', surface: 'terminal' as const, isInteractive: true }
 const turn = (durationMs: number, answer: string) =>
   ({ answer, durationMs, isAborted: false, turnId: 't', reason: 'answer' }) as never
+/** Speaks `text` the way /say read does: as the last answer, read aloud. */
+const speak = async ($: { turn: { complete(e: never): Promise<unknown> }; command: { run(e: never): Promise<unknown> } }, text: string) => {
+  await $.turn.complete(turn(1_000, text))
+  await $.command.run({ command: 'say', args: 'read' } as never)
+}
 const settle = () => new Promise(r => setTimeout(r, 20))
 
-test('a long turn is summarized in this session own voice; a short one is not', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  await $.turn.complete(turn(5_000, 'Quick one.'))
-  await $.turn.complete(turn(60_000, 'Fixed the login bug. Details follow.'))
-  await settle()
-  expect(spoken).toHaveLength(1)
-  expect(spoken[0]).toEqual(['murmur', '--interrupt', '--speed', '1', '--voice', 'af_heart', '--', 'Fixed the login bug.'])
-})
-
-test('quiet by default: nothing is said while this terminal is focused', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
-  const focus = { tty: '/dev/ttys004' }
-  const spoken = machine(on, focus)
-  await $.session.start(start)
-  await $.turn.complete(turn(60_000, 'Done here.'))
-  await settle()
-  expect(spoken).toHaveLength(0)
-  focus.tty = '/dev/ttys009'  // you switched to another tab
-  await $.turn.complete(turn(60_000, 'Done here.'))
-  await settle()
-  expect(spoken).toHaveLength(1)
-})
-
-test('/say hush mutes everything until run again', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
+test('/say hush mutes everything until run again', async ($, on) => {
   const spoken = machine(on, { tty: '' })
   await $.session.start(start)
   expect((await $.command.run({ command: 'say', args: 'hush' } as never)).text).toContain('muted')
-  await $.turn.complete(turn(60_000, 'Muted answer.'))
+  await speak($, 'Muted answer.')
   await settle()
   expect(spoken.filter(a => a[1] !== 'stop')).toHaveLength(0)
   await $.command.run({ command: 'say', args: 'hush' } as never)
-  await $.turn.complete(turn(60_000, 'Heard answer.'))
+  await speak($, 'Heard answer.')
   await settle()
   expect(spoken.at(-1)?.at(-1)).toBe('Heard answer.')
 })
@@ -113,76 +95,32 @@ test('/say read says the whole last answer with code omitted, even when focused'
   expect(spoken.at(-1)?.at(-1)).toBe('Here:\n Code omitted. \nThat is all.')
 })
 
-test('a permission dialog is announced; auto mode approving a call is not', async ($, on) => {
-  const clock = mock.clock(on)
-  const files: Record<string, string> = { '/home/me/.claude/sessions/4242.json': JSON.stringify({ status: 'busy' }) }
-  const spoken = machine(on, { tty: '' }, files)
-  await $.session.start(start)
-  const asks = (id: string) => $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: id } as never)
-  await asks('u1')
-  await clock.advance(1600)                                        // the checker approves; no dialog
-  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
-  await asks('u2')
-  files['/home/me/.claude/sessions/4242.json'] = JSON.stringify({ status: 'waiting', waitingFor: 'permission prompt' })
-  await clock.advance(600)
-  await settle()
-  expect(spoken.map(s => s.at(-1))).toEqual(['Claude needs your permission to use Bash.'])
-})
-
-test('a fixed voice wins over the session voice, and claims nothing', { options: { voice: 'bf_emma', summaryStyle: 'first-sentence' } }, async ($, on) => {
+test('a fixed voice wins over the session voice, and claims nothing', { options: { voice: 'bf_emma' } }, async ($, on) => {
   const files: Record<string, string> = {}
   const spoken = machine(on, { tty: '' }, files)
   await $.session.start(start)
-  await $.turn.complete(turn(60_000, 'Voice check.'))
+  await speak($, 'Voice check.')
   await settle()
   expect(spoken[0]).toEqual(['murmur', '--interrupt', '--speed', '1', '--voice', 'bf_emma', '--', 'Voice check.'])
   expect(files[TABLE]).toBeUndefined()
 })
 
-test('a second live session gets the best-graded free voice; a dead one gives its voice back', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
+test('a second live session gets the best-graded free voice; a dead one gives its voice back', async ($, on) => {
   const files: Record<string, string> = { [TABLE]: JSON.stringify({ 1111: 'af_heart', 2222: 'bm_george' }) }
   const spoken = machine(on, { tty: '' }, files, ['1111'])  // 2222 has exited
   await $.session.start(start)
-  await $.turn.complete(turn(60_000, 'Hello.'))
+  await speak($, 'Hello.')
   await settle()
   expect(spoken[0]).toContain('bf_emma')
   expect(JSON.parse(files[TABLE]!)).toEqual({ 1111: 'af_heart', 4242: 'bf_emma' })
 })
 
-test('the session voice comes from the configured list', { options: { voices: 'bm_lewis, af_sky', summaryStyle: 'first-sentence' } }, async ($, on) => {
+test('the session voice comes from the configured list', { options: { voices: 'bm_lewis, af_sky' } }, async ($, on) => {
   const spoken = machine(on, { tty: '' })
   await $.session.start(start)
-  await $.turn.complete(turn(60_000, 'Hi.'))
+  await speak($, 'Hi.')
   await settle()
   expect(spoken[0]).toContain('bm_lewis')
-})
-
-test('a finished background task is announced', async ($, on) => {
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  await $.prompt.submit({ text: '<task-notification><status>completed</status><summary>All 42 tests passed</summary></task-notification>', origin: { kind: 'task-notification' } } as never)
-  await settle()
-  expect(spoken.at(-1)?.at(-1)).toBe('Background task: All 42 tests passed')
-})
-
-test('a rate limit is warned about once per window', async ($, on) => {
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  const measure = (percentUsed: number) =>
-    $.session.measure({ context: {}, rateLimits: [{ kind: 'five_hour', percentUsed, resetsAt: 'R1' }], changed: ['rateLimits'] } as never)
-  await measure(85)
-  await measure(91)
-  await measure(95)
-  await settle()
-  expect(spoken.map(a => a.at(-1))).toEqual(["Heads up: you've used 91 percent of your five hour limit."])
-})
-
-test('a limit another session already warned about is not said again', async ($, on) => {
-  const spoken = machine(on, { tty: '' }, {}, [], { warnedLimits: ['five_hour@R1'] })
-  await $.session.start(start)
-  await $.session.measure({ context: {}, rateLimits: [{ kind: 'five_hour', percentUsed: 95, resetsAt: 'R1' }], changed: ['rateLimits'] } as never)
-  await settle()
-  expect(spoken).toHaveLength(0)
 })
 
 test('/say hush is kept in session state, which outlives a reload of the mod', async ($, on) => {
@@ -206,46 +144,12 @@ test('after /clear the chosen voice is saved under the new conversation', async 
   expect(files[`/home/me/Library/Caches/claude-say/chosen/${conversation.id}`]).toBe('bf_emma')
 })
 
-test('long turns check in every few minutes', { options: { checkinMinutes: 1 } }, async ($, on) => {
-  const clock = mock.clock(on)
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  await $.prompt.submit({ text: 'Build it', origin: { kind: 'user' } } as never)
-  await clock.advance(60_000)
-  await settle()
-  expect(spoken.at(-1)?.at(-1)).toMatch(/^Still working, \d+ minutes? in\.$/)
-})
-
-test('with the tldr mod on, voice speaks its line and makes no Haiku call of its own', async ($, on) => {
-  let haikuCalls = 0
-  on('config.list', () => ({ value: [{ key: 'tldr.minChars', value: 600 }] }) as never)
-  on('state.get', () => ({ value: { value: { turnId: 't', text: 'Built the tab progress bar.' }, version: 1 } }) as never)
-  on('model.complete', () => (haikuCalls++, { value: { isAnswered: true, text: 'Own line.', usage: {} } }) as never)
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  await $.turn.complete(turn(60_000, 'A long answer.'))
-  await settle()
-  expect(spoken.at(-1)?.at(-1)).toBe('Built the tab progress bar.')
-  expect(haikuCalls).toBe(0)
-})
-
-test('when tldr has no line for the turn (a short reply), voice writes its own', async ($, on) => {
-  on('config.list', () => ({ value: [{ key: 'tldr.minChars', value: 600 }] }) as never)
-  on('state.get', () => ({ value: { value: { turnId: 't', text: '' }, version: 1 } }) as never)
-  on('model.complete', () => ({ value: { isAnswered: true, text: 'Own line.', usage: {} } }) as never)
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  await $.turn.complete(turn(60_000, 'Short.'))
-  await settle()
-  expect(spoken.at(-1)?.at(-1)).toBe('Own line.')
-})
-
 test('a soft chime plays before each spoken line', async ($, on) => {
   const spoken = machine(on, { tty: '' })
   await $.session.start(start)
-  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await speak($, 'A question.')
   await settle()
-  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await speak($, 'A question.')
   await settle()
   expect(spoken.heard).toEqual(['chime', 'speech', 'chime', 'speech'])
 })
@@ -253,17 +157,9 @@ test('a soft chime plays before each spoken line', async ($, on) => {
 test('no chime when it is off', { options: { chime: false } }, async ($, on) => {
   const spoken = machine(on, { tty: '' })
   await $.session.start(start)
-  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await speak($, 'A question.')
   await settle()
   expect(spoken.heard).toEqual(['speech'])
-})
-
-test('a turn an API error ended is announced in place of its summary', async ($, on) => {
-  const spoken = machine(on, { tty: '' })
-  await $.session.start(start)
-  await $.turn.complete({ ...(turn(60_000, 'API Error: Connection lost mid-response. The response above may be incomplete.') as object), reason: 'error' } as never)
-  await settle()
-  expect(spoken.map(s => s.at(-1))).toEqual(['Claude hit an error: Connection lost mid-response.'])
 })
 
 test('/say pick <name> switches this session voice, says hello in it, and remembers it', async ($, on) => {
@@ -283,7 +179,7 @@ test('/say pick <name> switches this session voice, says hello in it, and rememb
 test('a resumed conversation keeps its /say voice, even over a fixed voice', { options: { voice: 'af_heart' } }, async ($, on) => {
   const spoken = machine(on, { tty: '' }, { [CHOSEN]: 'bf_emma' })
   await $.session.start(start)
-  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+  await speak($, 'A question.')
   await settle()
   expect(spoken.at(-1)?.slice(4, 6)).toEqual(['--voice', 'bf_emma'])
 })

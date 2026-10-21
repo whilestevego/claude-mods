@@ -1,22 +1,12 @@
 import type { EngineInterface, PluginOptions, Register, RenderNode } from 'claude-code'
 
-import { checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine, voiceList } from './speech'
+import type { VoiceSaid } from '../types'
+
+import { prose, voiceList } from './speech'
 import { byGrade, claimVoice, matchVoice, parseCatalog, parseTable, weightedPick } from './voices'
 import type { VoiceInfo } from './voices'
-// tldr's state contract, for the line this mod speaks: a renamed key there fails type-checking here.
-import type {} from '../../tldr/types'
 
 type Config = {
-  speakWhen: string
-  turnSummaries: boolean
-  summaryStyle: string
-  minTurnSeconds: number
-  needsYou: boolean
-  backgroundTasks: boolean
-  checkins: boolean
-  checkinMinutes: number
-  rateLimitWarnings: boolean
-  rateLimitPercent: number
   speed: number
   chime: boolean
   voice: string
@@ -26,16 +16,6 @@ type Config = {
 function config(o: PluginOptions): Config {
   const num = (v: unknown, d: number) => (typeof v === 'number' && v > 0 ? v : d)
   return {
-    speakWhen: o.speakWhen === 'always' ? 'always' : 'away',
-    turnSummaries: o.turnSummaries !== false,
-    summaryStyle: o.summaryStyle === 'first-sentence' ? 'first-sentence' : 'haiku',
-    minTurnSeconds: num(o.minTurnSeconds, 20),
-    needsYou: o.needsYou !== false,
-    backgroundTasks: o.backgroundTasks !== false,
-    checkins: o.checkins !== false,
-    checkinMinutes: num(o.checkinMinutes, 5),
-    rateLimitWarnings: o.rateLimitWarnings !== false,
-    rateLimitPercent: num(o.rateLimitPercent, 90),
     speed: num(o.speed, 1),
     chime: o.chime !== false,
     voice: typeof o.voice === 'string' ? o.voice.trim() : '',
@@ -46,13 +26,13 @@ function config(o: PluginOptions): Config {
 /** /say hush, for this session: in $.state so a hot reload of the mod keeps it. */
 const MUTED = { plugin: 'say', key: 'muted' } as const
 const isMuted = async ($: EngineInterface) => (await $.state.get(MUTED)).value === true
-/** Rate-limit windows already warned about, as "kind@resetsAt": in $.store, so one warning covers every session. */
-const WARNED = 'warnedLimits'
 
 // The module's own session state; a reload starts it over.
 let cfg: Config
 let claude: { tty: string; pid: string } | null = null
 let home = ''
+/** This mod's folder, for its chime. */
+let root = ''
 /** This session's own voice, claimed at start (unused when a fixed voice is set). */
 let sessionVoice = ''
 /** The voice you picked with /say for this conversation: wins over the session's own and the fixed one. */
@@ -63,13 +43,7 @@ let isChosenStale = false
 const PICKER = 'claude-say-picker'
 const currentVoice = () => chosen || cfg.voice || sessionVoice || 'af_heart'
 let picker: { voices: VoiceInfo[]; others: Set<string> } = { voices: [], others: new Set() }
-let inGhostty = false
-let lastRequest = ''
 let lastAnswer = ''
-let checkin: { cancel(): void } | undefined
-let turnStartedAt = 0
-/** Calls the permission check put to you, until they run or are refused. */
-const asking = new Set<string>()
 
 // "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
 // this shell, owns the tty too, and changes when mods reload). Its pid keys the session's voice. No API names either.
@@ -84,45 +58,10 @@ while [ "$p" -gt 1 ]; do
 done
 echo "$first"`
 
-// The tty of the terminal Ghostty has focused, or nothing when Ghostty isn't the frontmost app.
-const FOCUSED_TTY = `tell application "Ghostty"
-  if frontmost then return tty of focused terminal of selected tab of front window
-  return ""
-end tell`
-
 async function locate($: EngineInterface) {
-  inGhostty = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() === 'ghostty'
   home = (await $.env.get('HOME')) ?? ''
   const [tty, pid] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(' ')
   claude = tty && pid ? { tty, pid } : null
-}
-
-/** Claude Code's record of this session (~/.claude/sessions/<pid>.json) says its permission dialog is up. */
-function asksPermission(record: string): boolean {
-  try {
-    const r = JSON.parse(record) as { status?: unknown; waitingFor?: unknown }
-    return r.status === 'waiting' && typeof r.waitingFor === 'string' && /permission/i.test(r.waitingFor)
-  } catch {
-    return false
-  }
-}
-
-/**
- * A call that asks waits in Claude Code's dialog, or in auto mode its checker. Only the dialog marks the session
- * record waiting, so watch it while the call is pending. Mods hear neither classic.PermissionRequest nor
- * classic.Notification while a dialog is up (checked on 2.1.301), so this file is the only sign.
- */
-async function watchForDialog($: EngineInterface, id: string, tool: string) {
-  if (!claude || !home) return
-  asking.add(id)
-  // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
-  for (let i = 0; i < 1200; i++) {
-    await $.clock.sleep(500)
-    if (!asking.has(id)) return
-    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${claude.pid}.json`).catch(() => ''))) {
-      return say($, `Claude needs your permission to use ${tool}.`)
-    }
-  }
 }
 
 // /say's choice, kept per conversation so resuming it (or reopening its workspace) keeps the voice.
@@ -142,7 +81,7 @@ async function choose($: EngineInterface, v: VoiceInfo): Promise<string> {
   chosen = v.id
   await saveChosen($)
   await claimSessionVoice($).catch(() => {})
-  void say($, sample(v.name), true)
+  void say($, sample(v.name))
   return `🔊 This session now speaks as ${v.name} (${v.id}).` + (v.isInstalled ? '' : ' It installs on first use, so the first line may take a moment.')
 }
 
@@ -175,55 +114,19 @@ async function claimSessionVoice($: EngineInterface) {
   await $.fs.write(file, JSON.stringify(claimed.table))
 }
 
-// Quiet by default: speak only when this terminal isn't the one in front of you.
-async function isAway($: EngineInterface): Promise<boolean> {
-  if (cfg.speakWhen === 'always' || !inGhostty || !claude) return true  // can't tell: the other gates decide
-  const r = await $.process.run(['osascript', '-e', FOCUSED_TTY])
-  return r.exitCode !== 0 || r.stdout.trim() !== `/dev/${claude.tty}`
-}
-
-// Interrupt, don't stack: each new line cuts off whatever is still playing.
-async function say($: EngineInterface, text: string, always = false) {
-  if (!text.trim() || (await isMuted($)) || (!always && !(await isAway($)))) return
+// Interrupt, don't stack: each new line cuts off whatever is still playing. Whether a line is worth saying at all
+// (is anyone away from this terminal?) is the caller's call: the notify mod's, or yours with /say.
+async function say($: EngineInterface, text: string): Promise<VoiceSaid> {
+  if (!text.trim() || (await isMuted($))) return { isSpoken: false }
   // A soft bell first (the mod's chime.wav), so speech never starts out of nowhere. Not awaited: murmur takes
   // about as long to get ready as the bell rings.
-  if (cfg.chime) void $.process.run(['afplay', `${$.plugin.root}/chime.wav`]).catch(() => null)
+  if (cfg.chime && root) void $.process.run(['afplay', `${root}/chime.wav`]).catch(() => null)
   const argv = ['murmur', '--interrupt', '--speed', String(cfg.speed)]
   const voice = chosen || cfg.voice || sessionVoice
   if (voice) argv.push('--voice', voice)
   const r = await $.process.run([...argv, '--', text]).catch(() => null)
   if (r && r.exitCode !== 0) $.ui.toast(`murmur: ${r.stderr.trim().slice(0, 120) || 'failed'}`)
-}
-
-/** The tldr mod's line for this turn, when tldr is enabled: one summary, shown and spoken. Empty when it has none. */
-async function tldrLine($: EngineInterface, turnId: string): Promise<string> {
-  const rows = await $.config.list().catch(() => [])
-  if (!rows.some(r => r.key.startsWith('tldr.'))) return ''
-  // tldr publishes after its own Haiku call (8 s at most); a short reply publishes an empty line at once.
-  for (let waited = 0; waited <= 10_000; waited += 250) {
-    const held = await $.state.get({ plugin: 'tldr', key: 'line' })
-    if (held.value?.turnId === turnId) return held.value.text ?? ''
-    await $.clock.sleep(250)
-  }
-  return ''
-}
-
-async function summarize($: EngineInterface, turnId: string, request: string, answer: string): Promise<string> {
-  if (cfg.summaryStyle === 'first-sentence') return firstSentence(answer)
-  const shared = await tldrLine($, turnId)
-  if (shared) return shared
-  const r = await $.model.complete({ model: 'haiku', prompt: summaryPrompt(request, answer), maxTokens: 60 })
-  const line = r.isAnswered ? prose(r.text).replace(/\s+/g, ' ').trim() : ''
-  return line && line.length <= 200 ? line : firstSentence(answer)
-}
-
-async function checkIn($: EngineInterface) {
-  await say($, checkinLine(Math.round((Date.now() - turnStartedAt) / 60000)))
-}
-
-function stopCheckins() {
-  checkin?.cancel()
-  checkin = undefined
+  return { isSpoken: r?.exitCode === 0 }
 }
 
 /** What a voice says to show how it sounds. */
@@ -236,7 +139,7 @@ async function pickVoice($: EngineInterface, query: string): Promise<{ text: str
   if (!query) {
     const name = voices.find(v => v.id === currentVoice())?.name ?? currentVoice()
     if (await isMuted($)) return { text: `🔊 This session speaks as ${name} (${currentVoice()}), muted. /say pick for another.` }
-    void say($, sample(name), true)
+    void say($, sample(name))
     return { text: `🔊 This session speaks as ${name} (${currentVoice()}). /say pick for another.` }
   }
   const [word = '', ...rest] = query.split(/\s+/)
@@ -276,7 +179,7 @@ async function hush($: EngineInterface): Promise<{ text: string }> {
 async function readAloud($: EngineInterface): Promise<{ text: string }> {
   if (!lastAnswer) return { text: 'Nothing to read yet.' }
   if (await isMuted($)) return { text: 'Muted: /say hush to unmute first.' }
-  void say($, prose(lastAnswer, 'Code omitted.'), true)
+  void say($, prose(lastAnswer, 'Code omitted.'))
   return { text: '🔊 Reading the last answer aloud. /say hush stops it.' }
 }
 
@@ -287,15 +190,21 @@ async function tldrAloud($: EngineInterface): Promise<{ text: string }> {
   })
   if (!r.isAnswered) return { text: `Couldn't summarize: ${r.reason}` }
   const line = prose(r.text).replace(/\s+/g, ' ').trim()
-  void say($, line, true)
+  void say($, line)
   return { text: `🔊 ${line}` }
 }
 
 export const register: Register = (on, options) => {
   cfg = config(options)
-  // Hooks that gate a prompt or a tool call pass it on untouched if they fail: speech must never block work.
+
+  // $.voice.say: other mods (notify) speak through this session's voice. The noun's own method holds no `$`, so
+  // it only answers when nothing else does; the voice.say hook below, which has one, does the speaking.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), voice: { say: async () => ({ isSpoken: false }) } }))
+
+  on('voice.say', async ($, e) => ({ value: await say($, e.text) }))
 
   on('session.start', async ($, e, next) => {
+    root = $.plugin.root
     await locate($)
     const file = await chosenFile($).catch(() => undefined)
     chosen = file ? (await $.fs.read(file).catch(() => '')).trim() : ''
@@ -304,70 +213,15 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // Every turn starts here: its request, a fresh todo list, and the check-in timer.
-  on('prompt.submit', async ($, e, next) => {
-    stopCheckins()
-    turnStartedAt = Date.now()
+  on('prompt.submit', ($, e, next) => {
     if (isChosenStale && chosen) void saveChosen($).catch(() => {})
     isChosenStale = false
-    if (e.origin.kind === 'task-notification') {
-      if (cfg.backgroundTasks) void say($, taskLine(e.text))
-    } else {
-      lastRequest = e.text
-    }
-    if (cfg.checkins) checkin = $.clock.every(cfg.checkinMinutes * 60_000, () => void checkIn($))
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  on('tool.call', { tool: 'AskUserQuestion' }, ($, e, next) => {
-    if (cfg.needsYou) void say($, 'Claude has a question for you.')
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('tool.check', async ($, e, next) => {
-    const r = await next(e)
-    if (cfg.needsYou && r.decision === 'ask' && e.tool_use_id) void watchForDialog($, e.tool_use_id, e.tool).catch(() => {})
-    return r
-  }).catch(($, e, next) => next(e))
-
-  // A call that ran or was refused is no longer waiting on you.
-  on('tool.call', async ($, e, next) => {
-    try {
-      return await next(e)
-    } finally {
-      asking.delete((e as { tool_use_id?: string }).tool_use_id ?? '')
-    }
-  }).catch(($, e, next) => next(e))
-
-  on('turn.complete', async ($, e, next) => {
-    if (e.agentId) return next(e)
-    stopCheckins()
-    lastAnswer = e.answer
-    const isLong = e.durationMs >= cfg.minTurnSeconds * 1000
-    // An API error ends the turn (connection lost, the computer slept): say so, in place of a summary.
-    const error = errorLine(e.reason, e.answer)
-    if (error) {
-      if (cfg.needsYou) void say($, error)
-    } else if (cfg.turnSummaries && e.reason === 'answer' && isLong && !(await isMuted($))) {
-      const request = lastRequest
-      void summarize($, e.turnId, request, e.answer).then(line => say($, line))
-    }
-    return next(e)
-  })
-
-  // The limits are your account's, not this session's: whichever session sees one cross first says it.
-  // ponytail: two sessions measuring in the same instant can both say it; a lock if that ever happens.
-  on('session.measure', async ($, e, next) => {
-    const crossed = cfg.rateLimitWarnings ? e.rateLimits.filter(w => w.percentUsed >= cfg.rateLimitPercent) : []
-    if (crossed.length) {
-      const stored = await $.store.get(WARNED)
-      const warned = Array.isArray(stored) ? (stored as string[]) : []
-      const fresh = crossed.filter(w => !warned.includes(`${w.kind}@${w.resetsAt ?? ''}`))
-      if (fresh.length) {
-        await $.store.set(WARNED, [...warned, ...fresh.map(w => `${w.kind}@${w.resetsAt ?? ''}`)].slice(-20))
-        for (const w of fresh) void say($, rateLimitLine(w.kind, w.percentUsed))
-      }
-    }
+  // For /say read.
+  on('turn.complete', ($, e, next) => {
+    if (!e.agentId) lastAnswer = e.answer
     return next(e)
   })
 

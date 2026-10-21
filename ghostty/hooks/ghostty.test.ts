@@ -6,7 +6,7 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
 const settle = () => new Promise(r => setTimeout(r, 20))
 
 /** Fakes the machine: Claude on /dev/ttys004 among Ghostty's terminals; `written` collects what reaches the tab. */
-function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } = {}) {
+function machine(on: On, opts: { toolFails?: boolean } = {}) {
   const written: string[] = []
   /** Claude Code's record of this session: 'dialog' while its permission dialog is up. */
   const claude = { status: 'busy' }
@@ -25,7 +25,6 @@ function machine(on: On, opts: { voiceNeedsYou?: boolean; toolFails?: boolean } 
   })
   on('session.id', () => ({ value: 's' }) as never)
   on('session.messages', () => ({ value: [{ role: 'user', text: 'Build the progress bar', toolUses: [] }] }) as never)
-  on('config.list', () => ({ value: opts.voiceNeedsYou ? [{ key: 'say.needsYou', value: true }] : [] }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'Tab Progress Bar', usage: {} } }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', () => ({ text: '' }))
@@ -77,7 +76,7 @@ test('a failed tool call turns the bar red', async ($, on) => {
   expect(w).toContain('\x1b]9;4;2;100\x07')
 })
 
-test('waiting on you: ❓ in the title, a paused bar and a notification', async ($, on) => {
+test('waiting on you: ❓ in the title and a paused bar, and no notification (the notify mod sends that)', async ($, on) => {
   const clock = mock.clock(on)
   const w = machine(on)
   await $.session.start(start)
@@ -88,7 +87,7 @@ test('waiting on you: ❓ in the title, a paused bar and a notification', async 
   await settle(); await clock.advance(200)
   expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
   expect(w).toContain('\x1b]9;4;4\x07')
-  expect(w).toContain('notify:Claude Code;Claude needs your permission to use Bash')
+  expect(w.some(s => s.startsWith('notify:'))).toBe(false)
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)  // you allowed it: the tool ran
   await settle(); await clock.advance(200)
   expect(w.at(-2) + w.at(-1)!).toContain('✳ Tab Progress Bar')
@@ -151,20 +150,7 @@ test('auto mode approving a call that asks is not waiting on you', async ($, on)
   expect(w.some(s => s.includes('❓') || s.startsWith('notify:'))).toBe(false)
 })
 
-test('no notification when the say mod says it out loud', async ($, on) => {
-  const clock = mock.clock(on)
-  const w = machine(on, { voiceNeedsYou: true })
-  await $.session.start(start)
-  await $.prompt.submit(submit)
-  await asks($, 'u1')
-  w.claude.status = 'dialog'
-  await clock.advance(600)
-  await settle(); await clock.advance(200)
-  expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
-  expect(w.some(s => s.startsWith('notify:'))).toBe(false)
-})
-
-test('everything off writes nothing', { options: { tabTitle: false, tabProgress: false, waitingBadge: false, waitingNotification: 'never' } }, async ($, on) => {
+test('everything off writes nothing', { options: { tabTitle: false, tabProgress: false, waitingBadge: false } }, async ($, on) => {
   const w = machine(on)
   await $.session.start(start)
   await $.prompt.submit(submit)
