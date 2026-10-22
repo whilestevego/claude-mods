@@ -1,6 +1,6 @@
 {
   "name": "ghostty",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ when Claude waits on you (the notify mod sends the notification), /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
   "author": {
     "name": "Steve Godin",

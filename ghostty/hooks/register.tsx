@@ -105,6 +105,19 @@ async function listSessions($: EngineInterface): Promise<Session[]> {
   return claudeSessions(terms.stdout, new Set(ttys.stdout.split('\n').filter(Boolean)), tty)
 }
 
+// The tty of the terminal Ghostty has focused, or nothing when Ghostty isn't the frontmost app.
+const FOCUSED_TTY = `tell application "Ghostty"
+  if frontmost then return tty of focused terminal of selected tab of front window
+  return ""
+end tell`
+
+/** This session's terminal is the one in front of you. Unsure (no tty, AppleScript failed) reads as not. */
+async function isFocused($: EngineInterface): Promise<boolean> {
+  if (!tty) return false
+  const r = await $.process.run(['osascript', '-e', FOCUSED_TTY])
+  return r.exitCode === 0 && r.stdout.trim() === tty
+}
+
 async function goTo($: EngineInterface, s: Session) {
   await $.process.run(['osascript', '-e', FOCUS, s.id])
 }
@@ -431,6 +444,12 @@ function listing(bindings: readonly Binding[]): string {
 }
 
 export const register: Register = (on, options) => {
+  // $.ghostty.isFocused: other mods (notify) ask whether you're looking at this session. The noun's own method holds
+  // no `$`, so it only answers when nothing else does; the hook below, which has one, does the asking.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), ghostty: { isFocused: async () => false } }))
+
+  on('ghostty.isFocused', async $ => ({ value: await isFocused($) }))
+
   cfg = config(options)
   // Hooks that gate a prompt or a tool call pass it on untouched if they fail: the tab must never block work.
 

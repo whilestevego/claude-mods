@@ -6,8 +6,9 @@ one mod. Turn on the ones you want (see [Setup](#setup)) and change their settin
 
 Each mod works on its own, and a few work better together. **notify** tells you when
 something happens; with **say** it can tell you out loud, with **tldr** its turn summaries
-reuse tldr's line instead of writing their own, and in **Ghostty** clicking its notification
-brings you back to the session's tab.
+reuse tldr's line instead of writing their own, and with **ghostty** it stays quiet while
+you're looking at the session. In Ghostty, clicking its notification brings you back to the
+session's tab.
 
 ## The mods
 
@@ -52,9 +53,9 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 ### notify
 
 Tells you when something happens in a session: as a desktop notification, out loud
-through say, or both. In Ghostty it only tells you when you're away from the session
-(another app or tab in front), so it never interrupts you while you're watching. In other
-terminals it can't tell, so it always tells you.
+through say, or both. With the ghostty mod on, it only tells you when you're away from the
+session (another app or tab in front), so it never interrupts you while you're watching.
+Without it, nothing can tell whether you're looking, so it always tells you.
 
 - **What it tells you about:** Claude needs your permission or has a question, or a turn
   stopped on an API error (like a lost connection); a long turn finished, with a one-line
@@ -194,6 +195,7 @@ claude plugin test context-bar       # run its tests
 ```
 
 Mods can call each other through nouns on `$`: say adds `$.voice.say({ text })`, which
-notify speaks through. Its types are in `say/types/index.d.ts`.
+notify speaks through, and ghostty adds `$.ghostty.isFocused()`, which notify asks before
+alerting. Their types are in each mod's `types/index.d.ts`.
 
 [IDEAS.md](IDEAS.md) has ideas for more mods.
