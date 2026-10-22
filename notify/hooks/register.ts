@@ -2,9 +2,11 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { channel, checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 import type { Channel } from './lines'
-// The contracts this mod reads: tldr's line for a turn, and say's voice. A renamed key there fails type-checking here.
+// The contracts this mod reads: tldr's line for a turn, say's voice, and ghostty's focus. A renamed key there fails
+// type-checking here.
 import type {} from '../../tldr/types'
 import type {} from '../../say/types'
+import type {} from '../../ghostty/types'
 
 type Config = {
   when: string
@@ -51,7 +53,8 @@ const HELP = [
 
 // The module's own session state; a reload starts it over.
 let cfg: Config
-let claude: { tty: string; pid: string } | null = null
+/** Claude's own process: its session record says when a permission dialog is up. */
+let pid = ''
 let home = ''
 let inGhostty = false
 /** The session's folder name, heading its banners so you can tell sessions apart. */
@@ -62,37 +65,29 @@ let turnStartedAt = 0
 /** Calls the permission check put to you, until they run or are refused. */
 const asking = new Set<string>()
 
-// "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
-// this shell, owns the tty too, and changes when mods reload). No API names either.
+// The pid of Claude itself: the nearest ancestor named claude (the mods' own host process sits between it and this
+// shell, and changes when mods reload). No API names it.
 const FIND_CLAUDE = `p=$$
-first=
 while [ "$p" -gt 1 ]; do
-  t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case "$t" in ''|'?'|'??') ;; *) [ -z "$first" ] && first="$t $p"
-    c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$t $p"; exit; } ;;
-  esac
+  c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$p"; exit; }
   p=$(ps -o ppid= -p "$p" | tr -d ' ')
-done
-echo "$first"`
-
-// The tty of the terminal Ghostty has focused, or nothing when Ghostty isn't the frontmost app.
-const FOCUSED_TTY = `tell application "Ghostty"
-  if frontmost then return tty of focused terminal of selected tab of front window
-  return ""
-end tell`
+done`
 
 async function locate($: EngineInterface) {
   inGhostty = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() === 'ghostty'
   home = (await $.env.get('HOME')) ?? ''
-  const [tty, pid] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(' ')
-  claude = tty && pid ? { tty, pid } : null
+  pid = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim()
 }
 
-// Quiet by default: alert only when this terminal isn't the one in front of you.
+// Quiet by default: alert only when this session isn't the one in front of you. The ghostty mod knows; without it
+// nothing can tell, so every alert goes out.
 async function isAway($: EngineInterface): Promise<boolean> {
-  if (cfg.when === 'always' || !inGhostty || !claude) return true // can't tell: the channel settings decide
-  const r = await $.process.run(['osascript', '-e', FOCUSED_TTY])
-  return r.exitCode !== 0 || r.stdout.trim() !== `/dev/${claude.tty}`
+  if (cfg.when === 'always') return true
+  try {
+    return !(await $.ghostty.isFocused())
+  } catch {
+    return true
+  }
 }
 
 /**
@@ -129,13 +124,13 @@ function asksPermission(record: string): boolean {
  * classic.Notification while a dialog is up (checked on 2.1.301), so this file is the only sign.
  */
 async function watchForDialog($: EngineInterface, id: string, tool: string) {
-  if (!claude || !home) return
+  if (!pid || !home) return
   asking.add(id)
   // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
   for (let i = 0; i < 1200; i++) {
     await $.clock.sleep(500)
     if (!asking.has(id)) return
-    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${claude.pid}.json`).catch(() => ''))) {
+    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) {
       return alert($, cfg.needsYou, `Claude needs your permission to use ${tool}.`)
     }
   }

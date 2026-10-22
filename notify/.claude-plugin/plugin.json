@@ -1,6 +1,6 @@
 {
   "name": "notify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tells you when Claude needs you, finishes a long turn, nears a rate limit, finishes a background task or is still working: as a desktop notification (clicking it brings you to the session's tab) and, with the say mod, out loud",
   "author": {
     "name": "Steve Godin",
@@ -10,7 +10,7 @@
     "when": {
       "type": "string",
       "title": "Alert when",
-      "description": "away: only when this terminal isn't the focused one (Ghostty; elsewhere, always). always: whenever something happens",
+      "description": "away: only when you're not looking at this session (needs the ghostty mod; without it, always). always: whenever something happens",
       "options": [
         "away",
         "always"

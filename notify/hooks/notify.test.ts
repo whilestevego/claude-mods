@@ -5,22 +5,29 @@ import type { On } from 'claude-code'
 declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
 
 /**
- * Fakes the machine: Claude on ttys004 (pid 4242) in Ghostty, `focused` deciding what osascript reports, `files`
+ * Fakes the machine: Claude (pid 4242) on ttys004 in Ghostty, `focused` the terminal Ghostty has in front, `files`
  * the disk. What reached you comes back in order, as "banner:<title>|<text>" or "voice:<text>".
  */
-function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true) {
+function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true, hasGhostty = true) {
   const told: string[] = []
   on('ui.notify', (_$, e) => (told.push(`banner:${e.title}|${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
-  // Stands in for the say mod: it provides $.voice and answers voice.say.
+  // Stand-ins for the say mod ($.voice) and the ghostty mod ($.ghostty), each answered by a hook below.
+  on('engine.create', async (_$, e, next) => ({
+    ...(await next(e)),
+    ...(hasVoice && { voice: { say: async () => ({ isSpoken: false }) } }),
+    ...(hasGhostty && { ghostty: { isFocused: async () => false } }),
+  }))
   if (hasVoice) {
-    on('engine.create', async (_$, e, next) => ({ ...(await next(e)), voice: { say: async () => ({ isSpoken: false }) } }))
     on('voice.say', (_$, e) => (told.push(`voice:${e.text}`), { value: { isSpoken: true } }))
+  }
+  // This session is in front when Ghostty's focused terminal is ttys004.
+  if (hasGhostty) {
+    on('ghostty.isFocused', () => ({ value: focused.tty === '/dev/ttys004' }))
   }
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
-    if (argv[0] === 'sh') return out('ttys004 4242\n')
-    if (argv[0] === 'osascript') return out(focused.tty)
+    if (argv[0] === 'sh') return out('4242\n')
     if (argv[0] === 'open') told.push(`open:${argv[1]}`)
     return out('')
   })
@@ -207,4 +214,12 @@ test('no hint when no event sends banners', { options: { needsYou: 'voice', turn
   const told = machine(on, { tty: '' }, {}, {})
   await $.session.start(start)
   expect(told).toEqual([])
+})
+
+test('without the ghostty mod nothing can tell whether you are looking, so every alert goes out', { options: { summaryStyle: 'first-sentence' } }, async ($, on) => {
+  const told = machine(on, { tty: '/dev/ttys004' }, {}, { hintedTest: true }, true, false)
+  await $.session.start(start)
+  await $.turn.complete(turn(60_000, 'Done here.'))
+  await settle()
+  expect(told).toHaveLength(2)
 })
