@@ -1,7 +1,7 @@
 import type { ClientModule } from 'claude-code'
 
 // Drawn by the surface itself, so it keeps its own colors and isn't inverted on hover like a Button.
-const SessionId: ClientModule<{ id: string; copied: boolean }, boolean> = ({ id, copied }, surface) => {
+const SessionId: ClientModule<{ emoji: string; text: string; copied: boolean }, boolean> = ({ emoji, text, copied }, surface) => {
   const { Text } = surface.elements
   surface.onPointer(ev => {
     if (ev.type === 'enter' || ev.type === 'leave') {
@@ -13,6 +13,6 @@ const SessionId: ClientModule<{ id: string; copied: boolean }, boolean> = ({ id,
   })
   return copied
     ? <Text color="green">✓ Copied</Text>
-    : <Text>🏷️ <Text color={surface.state ? 'blue' : undefined} underline>{id}</Text></Text>
+    : <Text>{emoji} <Text color={surface.state ? 'blue' : undefined} underline>{text.length > 30 ? `${text.slice(0, 29)}…` : text}</Text></Text>
 }
 export default SessionId

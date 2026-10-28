@@ -1,4 +1,4 @@
-export type Copied = boolean
+export type Copied = '' | 'name' | 'id'
 
 declare module 'claude-code' {
   interface PluginState {
