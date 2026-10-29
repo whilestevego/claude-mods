@@ -48,6 +48,7 @@ const NOTIFIER_ID = 'com.whilestevego.claude-notify.app'
 
 const HELP = [
   '/notify test      send a desktop notification now, to check they show up',
+  '/notify haiku     send one with a fresh haiku from Claude Haiku',
   "/notify settings  open your terminal's notification settings",
 ].join('\n')
 
@@ -192,6 +193,15 @@ async function testBanner($: EngineInterface): Promise<{ text: string }> {
   return { text: "🔔 Sent. Didn't see a banner? /notify settings opens the switch for it." }
 }
 
+/** A test banner whose text Claude Haiku writes: a fresh one each time, so you can tell it's the one you just sent. */
+async function haikuBanner($: EngineInterface): Promise<{ text: string }> {
+  const r = await $.model.complete({ model: 'haiku', prompt: 'Write one haiku about a desktop notification arriving. Reply with only its three lines.', maxTokens: 60 })
+  const haiku = r.isAnswered ? prose(r.text).trim() : ''
+  if (!haiku) return { text: "Claude Haiku didn't answer." }
+  const failed = await banner($, haiku)
+  return { text: failed ? `Couldn't send a notification (${failed}).` : `🔔 Sent:\n${haiku}` }
+}
+
 async function openSettings($: EngineInterface): Promise<{ text: string }> {
   const r = await $.process.run(['open', notifier ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
   if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
@@ -214,7 +224,7 @@ export const register: Register = (on, options) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
     void buildNotifier($).catch(() => {})
-    await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test to check they show up, /notify settings to turn them on' })
+    await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test (or haiku) to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)
       $.ui.toast('notify: run /notify test to check desktop notifications show up')
@@ -225,6 +235,7 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'notify' }, async ($, e) => {
     switch (e.args.trim().toLowerCase()) {
       case 'test': return testBanner($)
+      case 'haiku': return haikuBanner($)
       case 'settings': return openSettings($)
       default: return { text: HELP }
     }

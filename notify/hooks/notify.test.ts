@@ -206,6 +206,14 @@ test("a banner is Claude Notify's, and its click comes back to this session's ta
   expect(told.clicksTo).toEqual(['/dev/ttys004'])
 })
 
+test('/notify haiku sends a banner with the haiku Claude Haiku wrote', async ($, on) => {
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'A soft chime rings out\nthe tab across the Spaces\ncalls you home again', usage: {} } }) as never)
+  const told = machine(on, { tty: '' })
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'notify', args: 'haiku' } as never)).text).toContain('calls you home again')
+  expect(told).toEqual([`banner:${TITLE}|A soft chime rings out\nthe tab across the Spaces\ncalls you home again`])
+})
+
 test("/notify settings opens Claude Notify's notification settings", async ($, on) => {
   const told = machine(on, { tty: '' })
   await $.session.start(start)
