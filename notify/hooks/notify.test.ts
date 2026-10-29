@@ -10,6 +10,8 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  */
 function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true, hasGhostty = true) {
   const told: string[] = []
+  /** Where a click on each Claude Notify banner goes: its tty. */
+  const clicksTo: string[] = []
   on('ui.notify', (_$, e) => (told.push(`banner:${e.title}|${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
   // Stand-ins for the say mod ($.voice) and the ghostty mod ($.ghostty), each answered by a hook below.
   on('engine.create', async (_$, e, next) => ({
@@ -27,8 +29,10 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
-    if (argv[0] === 'sh') return out('4242\n')
-    if (argv[0] === 'open') told.push(`open:${argv[1]}`)
+    if (argv[0] === 'sh') return out('4242 ttys004\n')
+    // Claude Notify: open -n <app> --args post <title> <text> <tty>
+    if (argv[0] === 'open' && argv[4] === 'post') (told.push(`banner:${argv[5]}|${argv[6]}`), clicksTo.push(argv[7]!))
+    else if (argv[0] === 'open') told.push(`open:${argv[1]}`)
     return out('')
   })
   on('fs.read', (_$, e) => {
@@ -46,7 +50,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('ui.toast', (_$, e) => (told.push(`toast:${e.text}`), { value: undefined }) as never)
-  return told
+  return Object.assign(told, { clicksTo })
 }
 
 const start = { cwd: '/work/brilliant', surface: 'terminal' as const, isInteractive: true }
@@ -195,11 +199,18 @@ test('/notify test sends a banner at once, even while this terminal is focused',
   expect(told).toEqual([`banner:${TITLE}|This is what notify alerts look like. Click it to come back to this tab.`])
 })
 
-test("/notify settings opens Ghostty's notification settings", async ($, on) => {
+test("a banner is Claude Notify's, and its click comes back to this session's tab", async ($, on) => {
   const told = machine(on, { tty: '' })
   await $.session.start(start)
-  expect((await $.command.run({ command: 'notify', args: 'settings' } as never)).text).toContain('for Ghostty')
-  expect(told).toEqual(['open:x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.mitchellh.ghostty'])
+  await $.command.run({ command: 'notify', args: 'test' } as never)
+  expect(told.clicksTo).toEqual(['/dev/ttys004'])
+})
+
+test("/notify settings opens Claude Notify's notification settings", async ($, on) => {
+  const told = machine(on, { tty: '' })
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'notify', args: 'settings' } as never)).text).toContain('for Claude Notify')
+  expect(told).toEqual(['open:x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.whilestevego.claude-notify.app'])
 })
 
 test('the first start hints at /notify test, once across sessions', async ($, on) => {

@@ -42,9 +42,9 @@ const WARNED = 'warnedLimits'
 /** Set once the /notify test hint has been shown: in $.store, so it shows once, not once per session. */
 const HINTED = 'hintedTest'
 
-/** System Settings' Notifications page: Ghostty's own entry in Ghostty, the whole list elsewhere. */
+/** System Settings' Notifications page: the banner app's own entry in Ghostty, the whole list elsewhere. */
 const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension'
-const GHOSTTY_ID = 'com.mitchellh.ghostty'
+const NOTIFIER_ID = 'com.whilestevego.claude-notify.app'
 
 const HELP = [
   '/notify test      send a desktop notification now, to check they show up',
@@ -55,7 +55,11 @@ const HELP = [
 let cfg: Config
 /** Claude's own process: its session record says when a permission dialog is up. */
 let pid = ''
+/** Claude's terminal: a click on its banner comes back to this tab. */
+let tty = ''
 let home = ''
+/** Claude Notify.app once built: banners in Ghostty go through it. */
+let notifier = ''
 let inGhostty = false
 /** The session's folder name, heading its banners so you can tell sessions apart. */
 let folder = ''
@@ -65,18 +69,41 @@ let turnStartedAt = 0
 /** Calls the permission check put to you, until they run or are refused. */
 const asking = new Set<string>()
 
-// The pid of Claude itself: the nearest ancestor named claude (the mods' own host process sits between it and this
-// shell, and changes when mods reload). No API names it.
+// "<pid> <tty>" of Claude itself: the nearest ancestor named claude (the mods' own host process sits between it and
+// this shell, and changes when mods reload). No API names it.
 const FIND_CLAUDE = `p=$$
 while [ "$p" -gt 1 ]; do
-  c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$p"; exit; }
+  c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$p $(ps -o tty= -p "$p")"; exit; }
   p=$(ps -o ppid= -p "$p" | tr -d ' ')
 done`
 
 async function locate($: EngineInterface) {
   inGhostty = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() === 'ghostty'
   home = (await $.env.get('HOME')) ?? ''
-  pid = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim()
+  const [found = '', term = ''] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(/\s+/)
+  pid = found
+  tty = term && !term.startsWith('?') ? `/dev/${term}` : ''
+}
+
+/** Builds Claude Notify.app when its source changed; until it's built, banners go through Claude Code's channel. */
+async function buildNotifier($: EngineInterface) {
+  if (!inGhostty) return
+  const root = $.plugin.root
+  const r = await $.process.run(['sh', `${root}/hooks/build-notifier.sh`, root])
+  if (r.exitCode === 0) notifier = `${root}/.build/Claude Notify.app`
+}
+
+/**
+ * Shows a banner; the reason it couldn't, if it couldn't. In Ghostty it comes from Claude Notify: Ghostty's own banner
+ * click pulls a background tab's window over to your Space, Claude Notify's slides to the window's Space instead.
+ */
+async function banner($: EngineInterface, text: string): Promise<string | undefined> {
+  if (notifier) {
+    const r = await $.process.run(['open', '-n', notifier, '--args', 'post', title(), text, tty])
+    return r.exitCode === 0 ? undefined : r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`
+  }
+  const sent = await $.ui.notify(text, { title: title() })
+  return sent.isSent ? undefined : sent.reason
 }
 
 // Quiet by default: alert only when this session isn't the one in front of you. The ghostty mod knows; without it
@@ -90,13 +117,10 @@ async function isAway($: EngineInterface): Promise<boolean> {
   }
 }
 
-/**
- * One alert, on the channels its setting names. The banner goes through Claude Code's notification channel; in
- * Ghostty a click on it focuses the tab that raised it. The voice is the say mod's, when it's loaded.
- */
+/** One alert, on the channels its setting names: a banner (see banner) and the say mod's voice, when it's loaded. */
 async function alert($: EngineInterface, to: Channel, text: string) {
   if (to === 'off' || !text.trim() || !(await isAway($))) return
-  await Promise.all([to !== 'voice' && $.ui.notify(text, { title: title() }).catch(() => null), to !== 'banner' && speak($, text)])
+  await Promise.all([to !== 'voice' && banner($, text).catch(() => null), to !== 'banner' && speak($, text)])
 }
 
 /** Says `text` in this session's voice. Without the say mod there's no $.voice, and the line goes unsaid. */
@@ -163,15 +187,15 @@ async function summarize($: EngineInterface, turnId: string, request: string, an
  * and lag behind the toggle), so the reliable check is to send one and look.
  */
 async function testBanner($: EngineInterface): Promise<{ text: string }> {
-  const sent = await $.ui.notify('This is what notify alerts look like. Click it to come back to this tab.', { title: title() })
-  if (!sent.isSent) return { text: `Couldn't send a notification (${sent.reason}).` }
+  const failed = await banner($, 'This is what notify alerts look like. Click it to come back to this tab.')
+  if (failed) return { text: `Couldn't send a notification (${failed}).` }
   return { text: "🔔 Sent. Didn't see a banner? /notify settings opens the switch for it." }
 }
 
 async function openSettings($: EngineInterface): Promise<{ text: string }> {
-  const r = await $.process.run(['open', inGhostty ? `${SETTINGS}?id=${GHOSTTY_ID}` : SETTINGS])
+  const r = await $.process.run(['open', notifier ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
   if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
-  return { text: `Opened System Settings. Turn on Allow notifications${inGhostty ? ' for Ghostty' : ''}, then /notify test.` }
+  return { text: `Opened System Settings. Turn on Allow notifications${notifier ? ' for Claude Notify' : ''}, then /notify test.` }
 }
 
 const title = () => (folder ? `Claude Code · ${folder}` : 'Claude Code')
@@ -189,6 +213,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
+    void buildNotifier($).catch(() => {})
     await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)
