@@ -89,8 +89,22 @@ const LIST_TERMINALS = `tell application "Ghostty"
 end tell`
 // A string pattern with [/]: no backslash for the template literal to eat.
 const CLAUDE_TTYS = `ps -ax -o tty=,comm= | awk 'match($2, "(^|[/])claude$") { print "/dev/" $1 }'`
+// A native tab is a window of its own, and only a window's selected tab sits on a Space: focusing a background tab of
+// a window on another Space pulls the whole window over to this one. Focusing the selected tab first slides to the
+// window's Space instead; the background tab is then selected in place.
 const FOCUS = `on run argv
-  tell application "Ghostty" to focus (first terminal whose id is (item 1 of argv))
+  set target to item 1 of argv
+  tell application "Ghostty"
+    repeat with w in windows
+      repeat with t in tabs of w
+        if not (selected of t) and (id of terminals of t) contains target then
+          focus (focused terminal of selected tab of w)
+          delay 0.5
+        end if
+      end repeat
+    end repeat
+    focus (first terminal whose id is target)
+  end tell
 end run`
 
 async function listSessions($: EngineInterface): Promise<Session[]> {
