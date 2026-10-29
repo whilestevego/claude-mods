@@ -64,14 +64,17 @@ Without it, nothing can tell whether you're looking, so it always tells you.
 - **Where each one goes:** each event has its own setting in `/config` under **notify**:
   `both`, `banner` (the desktop notification), `voice` (spoken by say) or `off`. By default
   the first three are `both`, and background tasks and check-ins are `voice`.
-- **Clicking a notification** in Ghostty brings you to the tab of the session that sent it.
+- **Clicking a notification** in Ghostty brings you to the tab of the session that sent it,
+  switching to its Space rather than pulling its window over. In Ghostty the banners come
+  from Claude Notify, a small app notify builds from source the first time it starts.
   Each one is titled with the session's folder, so you can tell sessions apart.
 - Without say, `voice` alerts are skipped and the banners still go out.
 
 | Command | What it does |
 |---|---|
 | `/notify test` | Sends a desktop notification right away. macOS can't tell a mod whether your terminal may show notifications, so this is how to check. The first time notify starts, it reminds you once. |
-| `/notify settings` | Opens the switch in System Settings: Ghostty's own entry in Ghostty, the Notifications list elsewhere. |
+| `/notify haiku` | The same, with a fresh haiku from Claude Haiku as its text. |
+| `/notify settings` | Opens the switch in System Settings: Claude Notify's entry in Ghostty, the Notifications list elsewhere. |
 
 ### say
 
@@ -177,9 +180,10 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
   overwrite the tab title.
 - **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
-- **notify**'s desktop notifications need notifications allowed for your terminal, in
-  System Settings → Notifications (Ghostty, say). `/notify test` checks; `/notify settings`
-  opens the page.
+- **notify**'s desktop notifications need notifications allowed in System Settings →
+  Notifications: for Claude Notify in Ghostty, which needs the Xcode command line tools
+  (`swiftc`) to build, or for your terminal elsewhere. `/notify test` checks;
+  `/notify settings` opens the page.
 - **session-id**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 
 The first time a mod controls Ghostty, macOS asks for permission. Allow it.
