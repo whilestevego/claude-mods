@@ -53,9 +53,31 @@ export function errorLine(reason: string, answer: string): string {
   return first ? `Claude hit an error: ${first}` : 'Claude hit an error.'
 }
 
-/** The progress check-in during a long turn. */
-export function checkinLine(minutes: number): string {
-  return `Still working, ${minutes} minute${minutes === 1 ? '' : 's'} in.`
+/** The progress check-in during a long turn, naming what Claude is `doing` when known. */
+export function checkinLine(minutes: number, doing = ''): string {
+  const time = `${minutes} minute${minutes === 1 ? '' : 's'} in.`
+  return doing ? `Still working on ${doing}, ${time}` : `Still working, ${time}`
+}
+
+/**
+ * A tool's label → what to say after "working on": "Run the test suite" → "running the test suite". Pass `isGerund`
+ * for a spinner label ("Fixing the click"), already in that form. Kept to its first clause, at most 8 words.
+ */
+export function doing(label: string, isGerund = false): string {
+  const words = prose(label).split(/\s+(?:and|then)\s+|[,;:(—]|\s-\s/)[0]!.trim().replace(/[.!?]+$/, '').split(/\s+/).slice(0, 8)
+  const [first = '', ...rest] = words
+  if (!first) return ''
+  const verb = /^[A-Z][a-z]/.test(first) || /^[a-z]/.test(first) ? first.toLowerCase() : first // keep "CI", "README"
+  return [isGerund ? verb : ing(verb), ...rest].join(' ')
+}
+
+/** run → running, write → writing, fix → fixing. */
+// ponytail: plain English rules; a stressed-last-syllable verb not listed ("refer") gets one consonant.
+function ing(verb: string): string {
+  if (/ie$/.test(verb)) return verb.slice(0, -2) + 'ying'
+  if (/[^aeioy]e$/.test(verb)) return verb.slice(0, -1) + 'ing'
+  if (/^[^aeiou]*[aeiou][^aeiouwxy]$/.test(verb) || /^(commit|submit|admit|omit)$/.test(verb)) return verb + verb.at(-1) + 'ing'
+  return verb + 'ing'
 }
 
 export function rateLimitLine(kind: string, percent: number): string {

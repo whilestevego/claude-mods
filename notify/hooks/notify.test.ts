@@ -46,7 +46,8 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.check', () => ({ decision: 'ask' }) as never)
-  on('tool.call', () => ({ result: {}, text: '' }) as never)
+  // A task Claude creates is task 7.
+  on('tool.call', (_$, e) => ({ result: (e as { tool: string }).tool === 'TaskCreate' ? { task: { id: '7' } } : {}, text: '' }) as never)
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
   on('command.register', () => ({ value: {} }) as never)
@@ -158,7 +159,29 @@ test('long turns check in every few minutes, by voice', { options: { checkinMinu
   await $.prompt.submit({ text: 'Build it', origin: { kind: 'user' } } as never)
   await clock.advance(60_000)
   await settle()
-  expect(told.at(-1)).toMatch(/^voice:Still working, \d+ minutes? in\.$/)
+  expect(told.at(-1)).toBe("voice:Still working, 1 minute in.")
+})
+
+test('a check-in names the task in progress, else the latest step', { options: { checkinMinutes: 1 } }, async ($, on) => {
+  const clock = mock.clock(on)
+  const told = machine(on, { tty: '' })
+  on('classic.PermissionRequest', () => ({ decision: { behavior: 'allow' } }) as never) // you say yes
+  await $.session.start(start)
+  await $.prompt.submit({ text: 'Build it', origin: { kind: 'user' } } as never)
+  await $.tool.call({ tool: 'Bash', command: 'bun test', description: 'Run the test suite' } as never)
+  await clock.advance(60_000)
+  await settle()
+  expect(told.at(-1)).toBe('voice:Still working on running the test suite, 1 minute in.')
+  await $.tool.call({ tool: 'TaskCreate', subject: 'Fix the click', description: '…', activeForm: 'Fixing the banner click' } as never)
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '7', status: 'in_progress' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls', description: 'List files' } as never)
+  await clock.advance(60_000)
+  await settle()
+  expect(told.at(-1)).toBe('voice:Still working on fixing the banner click, 2 minutes in.')
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '7', status: 'completed' } as never)
+  await clock.advance(60_000)
+  await settle()
+  expect(told.at(-1)).toBe('voice:Still working on listing files, 3 minutes in.')
 })
 
 test('with the tldr mod on, its line is the summary and no Haiku call is made', { options: { turnDone: 'voice' } }, async ($, on) => {

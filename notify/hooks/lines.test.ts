@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { channel, checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
+import { channel, checkinLine, doing, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 
 test('prose strips markdown and can name code', () => {
   expect(prose('I fixed the **login** bug in `auth.ts`.')).toBe('I fixed the login bug in auth.ts.')
@@ -28,6 +28,21 @@ test('taskLine', () => {
 test('checkinLine', () => {
   expect(checkinLine(5)).toBe('Still working, 5 minutes in.')
   expect(checkinLine(1)).toBe('Still working, 1 minute in.')
+  expect(checkinLine(5, 'running the tests')).toBe('Still working on running the tests, 5 minutes in.')
+})
+
+test('doing turns a label into what Claude is on', () => {
+  expect(doing('Run the test suite')).toBe('running the test suite')
+  expect(doing('Write the config')).toBe('writing the config')
+  expect(doing('Fix the banner click')).toBe('fixing the banner click')
+  expect(doing('See what changed')).toBe('seeing what changed')
+  expect(doing('Commit and push the fix')).toBe('committing')
+  expect(doing('Check CI status, then report')).toBe('checking CI status')
+  expect(doing('Read `register.ts` to find the hook')).toBe('reading register.ts to find the hook')
+  expect(doing('Find every caller of the function across all of the mods')).toBe('finding every caller of the function across all')
+  expect(doing('Fixing the banner click', true)).toBe('fixing the banner click')
+  expect(doing('README cleanup', true)).toBe('README cleanup')
+  expect(doing('')).toBe('')
 })
 
 test('rateLimitLine', () => {

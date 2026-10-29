@@ -60,7 +60,8 @@ Without it, nothing can tell whether you're looking, so it always tells you.
 - **What it tells you about:** Claude needs your permission or has a question, or a turn
   stopped on an API error (like a lost connection); a long turn finished, with a one-line
   summary of what it did; you're close to a usage limit; a background task finished; and
-  every few minutes, how a long turn is going.
+  every few minutes, how a long turn is going ("Still working on running the tests, 5 minutes
+  in.", naming the task in progress, or else Claude's latest command).
 - **Where each one goes:** each event has its own setting in `/config` under **notify**:
   `both`, `banner` (the desktop notification), `voice` (spoken by say) or `off`. By default
   the first three are `both`, and background tasks and check-ins are `voice`.

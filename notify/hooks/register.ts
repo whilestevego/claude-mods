@@ -1,6 +1,6 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
-import { channel, checkinLine, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
+import { channel, checkinLine, doing, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 import type { Channel } from './lines'
 // The contracts this mod reads: tldr's line for a turn, say's voice, and ghostty's focus. A renamed key there fails
 // type-checking here.
@@ -66,7 +66,10 @@ let inGhostty = false
 let folder = ''
 let lastRequest = ''
 let checkin: { cancel(): void } | undefined
-let turnStartedAt = 0
+/** What the check-in says Claude is on: the task in progress, else the latest step (a Bash or Agent description). */
+const now = { task: '', taskId: '', step: '' }
+/** Each task's spinner label, by id, so marking one in progress can name it. */
+const tasks = new Map<string, string>()
 /** Calls the permission check put to you, until they run or are refused. */
 const asking = new Set<string>()
 
@@ -218,6 +221,26 @@ function stopCheckins() {
   checkin = undefined
 }
 
+// What Claude is on, for the check-in: its task list's item in progress, else what its latest Bash or Agent call says.
+function track(e: unknown, r: unknown) {
+  const a = e as Record<string, any>
+  if (a.tool === 'TodoWrite') {
+    const item = (a.todos as { status: string; activeForm: string }[] | undefined)?.find(t => t.status === 'in_progress')
+    now.task = item ? doing(item.activeForm, true) : ''
+  } else if (a.tool === 'TaskCreate') {
+    const id = (r as { result?: { task?: { id?: string } } }).result?.task?.id
+    if (id) tasks.set(id, a.activeForm ? doing(a.activeForm, true) : doing(a.subject ?? ''))
+  } else if (a.tool === 'TaskUpdate') {
+    if (a.activeForm) tasks.set(a.taskId, doing(a.activeForm, true))
+    else if (a.subject) tasks.set(a.taskId, doing(a.subject))
+    if (a.status === 'in_progress') Object.assign(now, { task: tasks.get(a.taskId) ?? '', taskId: a.taskId })
+    else if (a.status && a.taskId === now.taskId) Object.assign(now, { task: '', taskId: '' })
+    else if (a.taskId === now.taskId) now.task = tasks.get(a.taskId) ?? now.task
+  } else if ((a.tool === 'Bash' || a.tool === 'Agent') && typeof a.description === 'string') {
+    now.step = doing(a.description)
+  }
+}
+
 export const register: Register = (on, options) => {
   cfg = config(options)
   // Hooks that gate a prompt or a tool call pass it on untouched if they fail: an alert must never block work.
@@ -246,12 +269,14 @@ export const register: Register = (on, options) => {
   // Every turn starts here: its request, and the check-in timer.
   on('prompt.submit', async ($, e, next) => {
     stopCheckins()
-    turnStartedAt = Date.now()
+    now.step = ''
     if (e.origin.kind === 'task-notification') void alert($, cfg.backgroundTasks, taskLine(e.text))
     else lastRequest = e.text
     if (cfg.checkins !== 'off') {
+      let minutes = 0
       checkin = $.clock.every(cfg.checkinMinutes * 60_000, () => {
-        void alert($, cfg.checkins, checkinLine(Math.round((Date.now() - turnStartedAt) / 60000)))
+        minutes += cfg.checkinMinutes
+        void alert($, cfg.checkins, checkinLine(Math.round(minutes), now.task || now.step))
       })
     }
     return next(e)
@@ -271,7 +296,9 @@ export const register: Register = (on, options) => {
   // A call that ran or was refused is no longer waiting on you.
   on('tool.call', async ($, e, next) => {
     try {
-      return await next(e)
+      const r = await next(e)
+      track(e, r)
+      return r
     } finally {
       asking.delete((e as { tool_use_id?: string }).tool_use_id ?? '')
     }
