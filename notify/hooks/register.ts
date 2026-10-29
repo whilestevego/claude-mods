@@ -59,8 +59,8 @@ let pid = ''
 /** Claude's terminal: a click on its banner comes back to this tab. */
 let tty = ''
 let home = ''
-/** Claude Notify.app once built: banners in Ghostty go through it. */
-let notifier = ''
+/** Claude Notify.app, built at session start: banners in Ghostty go through it. Its build error when it couldn't be. */
+let notifier: Promise<{ app: string } | { error: string }> = Promise.resolve({ error: 'not built yet' })
 let inGhostty = false
 /** The session's folder name, heading its banners so you can tell sessions apart. */
 let folder = ''
@@ -86,21 +86,23 @@ async function locate($: EngineInterface) {
   tty = term && !term.startsWith('?') ? `/dev/${term}` : ''
 }
 
-/** Builds Claude Notify.app when its source changed; until it's built, banners go through Claude Code's channel. */
-async function buildNotifier($: EngineInterface) {
-  if (!inGhostty) return
+/** Builds Claude Notify.app when its source changed. */
+async function buildNotifier($: EngineInterface): Promise<{ app: string } | { error: string }> {
   const root = $.plugin.root
   const r = await $.process.run(['sh', `${root}/hooks/build-notifier.sh`, root])
-  if (r.exitCode === 0) notifier = `${root}/.build/Claude Notify.app`
+  return r.exitCode === 0 ? { app: `${root}/.build/Claude Notify.app` } : { error: r.stderr.trim().slice(-120) || `exit ${r.exitCode}` }
 }
 
 /**
  * Shows a banner; the reason it couldn't, if it couldn't. In Ghostty it comes from Claude Notify: Ghostty's own banner
  * click pulls a background tab's window over to your Space, Claude Notify's slides to the window's Space instead.
+ * Elsewhere Claude Code's channel sends it, since Claude Notify's click only finds Ghostty tabs.
  */
 async function banner($: EngineInterface, text: string): Promise<string | undefined> {
-  if (notifier) {
-    const r = await $.process.run(['open', '-n', notifier, '--args', 'post', title(), text, tty])
+  if (inGhostty) {
+    const built = await notifier
+    if ('error' in built) return `Claude Notify couldn't be built: ${built.error}`
+    const r = await $.process.run(['open', '-n', built.app, '--args', 'post', title(), text, tty])
     return r.exitCode === 0 ? undefined : r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`
   }
   const sent = await $.ui.notify(text, { title: title() })
@@ -203,9 +205,9 @@ async function haikuBanner($: EngineInterface): Promise<{ text: string }> {
 }
 
 async function openSettings($: EngineInterface): Promise<{ text: string }> {
-  const r = await $.process.run(['open', notifier ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
+  const r = await $.process.run(['open', inGhostty ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
   if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
-  return { text: `Opened System Settings. Turn on Allow notifications${notifier ? ' for Claude Notify' : ''}, then /notify test.` }
+  return { text: `Opened System Settings. Turn on Allow notifications${inGhostty ? ' for Claude Notify' : ''}, then /notify test.` }
 }
 
 const title = () => (folder ? `Claude Code · ${folder}` : 'Claude Code')
@@ -223,7 +225,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
-    void buildNotifier($).catch(() => {})
+    if (inGhostty) notifier = buildNotifier($).catch(e => ({ error: String(e) }))
     await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test (or haiku) to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)

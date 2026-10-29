@@ -8,7 +8,7 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  * Fakes the machine: Claude (pid 4242) on ttys004 in Ghostty, `focused` the terminal Ghostty has in front, `files`
  * the disk. What reached you comes back in order, as "banner:<title>|<text>" or "voice:<text>".
  */
-function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true, hasGhostty = true) {
+function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true, hasGhostty = true, buildError = '') {
   const told: string[] = []
   /** Where a click on each Claude Notify banner goes: its tty. */
   const clicksTo: string[] = []
@@ -29,6 +29,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
+    if (argv[0] === 'sh' && argv[1]?.endsWith('build-notifier.sh')) return { value: { exitCode: buildError ? 1 : 0, stdout: '', stderr: buildError } } as never
     if (argv[0] === 'sh') return out('4242 ttys004\n')
     // Claude Notify: open -n <app> --args post <title> <text> <tty>
     if (argv[0] === 'open' && argv[4] === 'post') (told.push(`banner:${argv[5]}|${argv[6]}`), clicksTo.push(argv[7]!))
@@ -212,6 +213,13 @@ test('/notify haiku sends a banner with the haiku Claude Haiku wrote', async ($,
   await $.session.start(start)
   expect((await $.command.run({ command: 'notify', args: 'haiku' } as never)).text).toContain('calls you home again')
   expect(told).toEqual([`banner:${TITLE}|A soft chime rings out\nthe tab across the Spaces\ncalls you home again`])
+})
+
+test("in Ghostty a banner is Claude Notify's or none: a failed build says why, and Ghostty's own isn't sent", async ($, on) => {
+  const told = machine(on, { tty: '' }, {}, { hintedTest: true }, true, true, 'swiftc: command not found')
+  await $.session.start(start)
+  expect((await $.command.run({ command: 'notify', args: 'test' } as never)).text).toContain("Claude Notify couldn't be built: swiftc: command not found")
+  expect(told).toEqual([])
 })
 
 test("/notify settings opens Claude Notify's notification settings", async ($, on) => {
