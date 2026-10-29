@@ -16,11 +16,13 @@ on run argv
       repeat with t in tabs of w
         repeat with s in terminals of t
           if tty of s is target then
+            -- s and w name it by position, and focusing a window reorders them: find it again by id.
+            set sid to id of s
             if not (selected of t) then
               focus (focused terminal of selected tab of w)
               delay 0.5
             end if
-            focus s
+            focus (first terminal whose id is sid)
             return
           end if
         end repeat
