@@ -45,6 +45,11 @@
       "name": "turn-receipt",
       "source": "./turn-receipt",
       "description": "A receipt row above the prompt after each turn: time, tools, files edited, cost"
+    },
+    {
+      "name": "worktree-name",
+      "source": "./worktree-name",
+      "description": "Shows the git worktree's name in the prompt footer; click to copy"
     }
   ]
 }

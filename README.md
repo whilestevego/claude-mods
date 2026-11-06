@@ -35,6 +35,13 @@ Shows this session's ID in the bottom-right corner of the screen.
 - Click it to copy the ID.
 - Ctrl-click it to copy the full `claude --resume <id>` command.
 
+### worktree-name
+
+Shows the name of the git worktree the session is in, next to session-id in the bottom-right
+corner. Outside a git repository it shows nothing.
+
+- Click it to copy the name.
+
 ### turn-receipt
 
 Adds a receipt to the line that closes each turn ("✻ Baked for 42s"): how many tools ran,
@@ -156,7 +163,7 @@ Install the mods you want, one line each, at the prompt of a Claude Code session
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`,
-`rate-limits`, `session-id`, `turn-receipt`, `tldr`, `notify`, `say` and `ghostty`.
+`rate-limits`, `session-id`, `worktree-name`, `turn-receipt`, `tldr`, `notify`, `say` and `ghostty`.
 
 ### From a clone, while working on them
 
