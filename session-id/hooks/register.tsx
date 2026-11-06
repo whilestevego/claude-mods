@@ -47,6 +47,9 @@ export const register: Register = on => {
     const id = await $.session.id()
     const name = await nameOf($, id)
     const whichCopied = await read($, copied)
+    // Pass the footer on with no mode labels, since this hook draws them itself. Mods beneath it,
+    // such as worktree-name, then add their own items after the id.
+    const rest = await next({ ...e, props: { ...e.props, modes: [] } })
 
     return (
       <Box>
@@ -54,6 +57,7 @@ export const register: Register = on => {
         {name && <Client key="session-name" module="./sid.tsx" props={{ emoji: '📝', text: name, copied: whichCopied === 'name' }} />}
         {name && <Text> </Text>}
         <Client key="session-id" module="./sid.tsx" props={{ emoji: '🏷️', text: id.slice(0, 8), copied: whichCopied === 'id' }} />
+        {rest}
       </Box>
     )
   })

@@ -15,6 +15,7 @@ test('click copies the id, shows Copied, then reverts', async ($, on) => {
     else shapes.push(`${e.argv[4]} > ${e.argv[5]}`)
     return { value: { exitCode: 0, stdout: isWalk ? '/dev/ttys004\n' : '', stderr: '' } } as never
   })
+  on('ui.render', { component: 'SessionMode' }, ($, e) => { const { Text } = $.ui.resolve(e); return <Text>{e.props.modes.join(',')}</Text> })
   on('session.id', () => ({ value: 'abc-123-def' }))
   on('ui.copy', (_$, e) => ((clip = e.text), { value: { isCopied: true } }))
   for (const surface of ['terminal', 'desktop'] as const) {
