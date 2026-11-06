@@ -34,10 +34,23 @@ const nameOf = async ($: EngineInterface, id: string) => {
   return named.text
 }
 
+// `git rev-parse --show-toplevel` names the worktree the session is in, unlike $.session.repo(), which answers the
+// main working tree. Outside a repo git fails and the name is empty. A directory's worktree doesn't change, so it's read once.
+const worktrees = new Map<string, Promise<string>>()
+const worktreeOf = async ($: EngineInterface) => {
+  const cwd = await $.session.cwd()
+  if (!worktrees.has(cwd)) {
+    worktrees.set(cwd, $.process.run(['git', '-C', cwd, 'rev-parse', '--show-toplevel'])
+      .then(r => (r.exitCode === 0 ? r.stdout.trim().split('/').pop() ?? '' : ''))
+      .catch(() => ''))
+  }
+  return worktrees.get(cwd)!
+}
+
 let wantedPointer = 'default'
 let sentPointer = 'default'
 
-const copied = atom({ plugin: 'session-id', key: 'copied' } as const, '' as Copied)
+const copied = atom({ plugin: 'session-info', key: 'copied' } as const, '' as Copied)
 
 export const register: Register = on => {
   // The footer's mode labels: no plugin-name prefix, always visible, and the id follows /clear.
@@ -46,9 +59,10 @@ export const register: Register = on => {
     const { Box, Text, Client } = $.ui.resolve(e)
     const id = await $.session.id()
     const name = await nameOf($, id)
+    const worktree = await worktreeOf($)
     const whichCopied = await read($, copied)
-    // Pass the footer on with no mode labels, since this hook draws them itself. Mods beneath it,
-    // such as worktree-name, then add their own items after the id.
+    // Pass the footer on with no mode labels, since this hook draws them itself. Other mods can then add their
+    // own items after these.
     const rest = await next({ ...e, props: { ...e.props, modes: [] } })
 
     return (
@@ -57,6 +71,8 @@ export const register: Register = on => {
         {name && <Client key="session-name" module="./sid.tsx" props={{ emoji: '📝', text: name, copied: whichCopied === 'name' }} />}
         {name && <Text> </Text>}
         <Client key="session-id" module="./sid.tsx" props={{ emoji: '🏷️', text: id.slice(0, 8), copied: whichCopied === 'id' }} />
+        {worktree && <Text> </Text>}
+        {worktree && <Client key="worktree" module="./sid.tsx" props={{ emoji: '🌳', text: worktree, copied: whichCopied === 'worktree' }} />}
         {rest}
       </Box>
     )
@@ -64,7 +80,8 @@ export const register: Register = on => {
 
   // sid.tsx posts hovers and clicks here, where $ can reach the tty and the clipboard.
   on('ui.message', async ($, e, next) => {
-    if (e.element !== 'session-id' && e.element !== 'session-name') return next(e)
+    const kind = ({ 'session-name': 'name', 'session-id': 'id', worktree: 'worktree' } as const)[e.element as string]
+    if (!kind) return next(e)
     if (e.data === 'enter' || e.data === 'leave') {
       // The hover redraws the id (its underline turns blue) at this very moment, and bytes written to the tty mid-frame
       // garble the screen, so let that redraw finish first. The last hover wins; a quick enter-leave writes nothing.
@@ -78,8 +95,10 @@ export const register: Register = on => {
       return next(e)
     }
     const id = await $.session.id()
-    const kind = e.element === 'session-name' ? 'name' : 'id'
-    const text = e.data === 'copy-command' ? `claude --resume ${id}` : kind === 'name' ? await nameOf($, id) : id
+    const text = e.data === 'copy-command' ? `claude --resume ${id}`
+      : kind === 'name' ? await nameOf($, id)
+      : kind === 'worktree' ? await worktreeOf($)
+      : id
     const { isCopied } = await $.ui.copy({ text, surface: e.surface })
     if (isCopied) {
       await update($, copied, () => kind)

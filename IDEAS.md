@@ -9,9 +9,9 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - `/context-bar` hides or shows it.
 - ✅ **rate-limits**: 5-hour and weekly usage meters under the context bar.
   - Yellow at 70%, red at 90%, and a warning once a limit passes 90%.
-- ✅ **session-id**: the session ID in the footer, as `🏷️ <id>`.
+- ✅ **session-info**: the session's name, ID and git worktree in the footer, as `📝 <name> 🏷️ <id> 🌳 <worktree>`.
   - Blue and underlined on hover, with a pointing-hand cursor (Ghostty, Kitty, foot).
-  - Click copies the ID; ctrl-click copies `claude --resume <id>`.
+  - Click copies what was clicked; ctrl-click copies `claude --resume <id>`.
 - ✅ **turn-receipt**: a receipt on each turn's "Baked for…" line.
   - Tools run, files edited, tokens in and out, and the turn's cost.
 - ✅ **tldr**: a one-sentence Haiku summary under long replies.

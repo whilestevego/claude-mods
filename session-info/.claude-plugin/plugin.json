@@ -1,0 +1,1 @@
+{ "name": "session-info", "version": "0.3.0", "description": "Shows the session name, session id and git worktree in the prompt footer; click to copy", "author": { "name": "Steve Godin", "url": "https://github.com/whilestevego" }, "types": "./types/index.d.ts" }

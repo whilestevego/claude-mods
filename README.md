@@ -28,19 +28,13 @@ loud, at a threshold you set.)
 
 - Nothing to do: it appears on its own when you're on a subscription plan.
 
-### session-id
+### session-info
 
-Shows this session's ID in the bottom-right corner of the screen.
+Shows the session's name, its ID and the name of its git worktree in the bottom-right corner
+of the screen. Outside a git repository the worktree is left out.
 
-- Click it to copy the ID.
-- Ctrl-click it to copy the full `claude --resume <id>` command.
-
-### worktree-name
-
-Shows the name of the git worktree the session is in, next to session-id in the bottom-right
-corner. Outside a git repository it shows nothing.
-
-- Click it to copy the name.
+- Click any of them to copy it.
+- Ctrl-click one to copy the full `claude --resume <id>` command.
 
 ### turn-receipt
 
@@ -163,7 +157,7 @@ Install the mods you want, one line each, at the prompt of a Claude Code session
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`,
-`rate-limits`, `session-id`, `worktree-name`, `turn-receipt`, `tldr`, `notify`, `say` and `ghostty`.
+`rate-limits`, `session-info`, `turn-receipt`, `tldr`, `notify`, `say` and `ghostty`.
 
 ### From a clone, while working on them
 
@@ -192,7 +186,7 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
   Notifications: for Claude Notify in Ghostty, which needs the Xcode command line tools
   (`swiftc`) to build, or for your terminal elsewhere. `/notify test` checks;
   `/notify settings` opens the page.
-- **session-id**'s pointing-hand cursor works in Ghostty, Kitty and foot.
+- **session-info**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 
 The first time a mod controls Ghostty, macOS asks for permission. Allow it.
 

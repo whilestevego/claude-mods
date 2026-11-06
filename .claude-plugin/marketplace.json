@@ -32,9 +32,9 @@
       "description": "Claude Code's voice, through murmur (Kokoro on the Apple Neural Engine): each session in its own voice (/say picks one), /say read and /say tldr, and $.voice.say for other mods; the notify mod decides what gets said"
     },
     {
-      "name": "session-id",
-      "source": "./session-id",
-      "description": "Shows the session id in the prompt footer; click to copy"
+      "name": "session-info",
+      "source": "./session-info",
+      "description": "Shows the session name, session id and git worktree in the prompt footer; click to copy"
     },
     {
       "name": "tldr",
@@ -45,11 +45,6 @@
       "name": "turn-receipt",
       "source": "./turn-receipt",
       "description": "A receipt row above the prompt after each turn: time, tools, files edited, cost"
-    },
-    {
-      "name": "worktree-name",
-      "source": "./worktree-name",
-      "description": "Shows the git worktree's name in the prompt footer; click to copy"
     }
   ]
 }

@@ -1,1 +1,0 @@
-{ "name": "worktree-name", "version": "0.1.0", "description": "Shows the git worktree's name in the prompt footer; click to copy", "author": { "name": "Steve Godin", "url": "https://github.com/whilestevego" }, "types": "./types/index.d.ts" }

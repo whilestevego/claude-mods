@@ -5,7 +5,9 @@ test('click copies the id, shows Copied, then reverts', async ($, on) => {
   let clip = ''
   const shapes: string[] = []
   let walks = 0
+  on('session.cwd', () => ({ value: '/src/app-feature' }))
   on('process.run', (_$, e) => {
+    if (e.argv[0] === 'git') return { value: { exitCode: 0, stdout: '/src/app-feature\n', stderr: '' } } as never
     if (e.argv[2]!.includes('sessions/')) {
       const stdout = e.argv[4] === 'abc-123-def' ? '{"sessionId":"abc-123-def","name":"Fix the footer"}' : ''
       return { value: { exitCode: 0, stdout, stderr: '' } } as never
@@ -20,7 +22,7 @@ test('click copies the id, shows Copied, then reverts', async ($, on) => {
   on('ui.copy', (_$, e) => ((clip = e.text), { value: { isCopied: true } }))
   for (const surface of ['terminal', 'desktop'] as const) {
     clip = ''
-    const ui = await $.ui.mount({ plugin: 'session-id', surface, component: 'SessionMode', props: { modes: [] } })
+    const ui = await $.ui.mount({ plugin: 'session-info', surface, component: 'SessionMode', props: { modes: [] } })
     const shows = (text: RegExp) => ui.find({ type: 'Text', text, in: 'session-id' })
     expect(await ui.find({ type: 'Text', text: /^Fix the footer$/, in: 'session-name' })).toBeDefined()
     expect((await shows(/^abc-123-$/))?.props.color).toBeUndefined()
@@ -51,6 +53,12 @@ test('click copies the id, shows Copied, then reverts', async ($, on) => {
     expect(await ui.find({ type: 'Text', text: /✓ Copied/, in: 'session-name' })).toBeDefined()
     expect(await shows(/^abc-123-$/)).toBeDefined()        // only the name shows Copied
     await clock.advance(1500)
+    await ui.pointer({ type: 'down', x: 3, y: 0, button: 'left', in: 'worktree' })
+    await ui.pointer({ type: 'up', x: 3, y: 0, button: 'left', in: 'worktree' })
+    expect(clip).toBe('app-feature')
+    expect(await ui.find({ type: 'Text', text: /✓ Copied/, in: 'worktree' })).toBeDefined()
+    await clock.advance(1500)
+    expect(await ui.find({ type: 'Text', text: /^app-feature$/, in: 'worktree' })).toBeDefined()
     await ui.unmount()
   }
   expect(walks).toBe(1)  // the tty is found once, not on every hover
