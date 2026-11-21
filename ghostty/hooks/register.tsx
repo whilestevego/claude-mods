@@ -361,12 +361,11 @@ async function deleteWorkspace($: EngineInterface, file: string) {
 
 
 export const register: Register = (on, options) => {
-  // $.terminal.isFocused: other mods (notify) ask whether you're looking at this session. The noun's own method holds
-  // no `$`, so it only answers when nothing else does; the hook below, which has one, does the asking. Outside Ghostty
-  // it passes the question on (the rex mod answers in Rex).
-  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), terminal: { isFocused: async () => false } }))
+  // $.ghostty.isFocused: notify asks whether you're looking at this session. The noun's own method holds no `$`, so the
+  // hook below, which has one, does the asking.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), ghostty: { isFocused: async () => false } }))
 
-  on('terminal.isFocused', async ($, e, next) => (tty ? { value: await isFocused($) } : next(e)))
+  on('ghostty.isFocused', async $ => ({ value: await isFocused($) }))
 
   cfg = config(options)
   // Hooks that gate a prompt or a tool call pass it on untouched if they fail: the tab must never block work.

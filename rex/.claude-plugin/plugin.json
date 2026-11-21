@@ -1,9 +1,24 @@
 {
   "name": "rex",
   "version": "0.1.0",
-  "description": "Rex integration: tells other mods (notify) whether you're looking at this session's pane. Claude Code reports its own status to Rex",
+  "description": "Rex integration: a 4-word summary of the session as its tab's name (/title for a new one now), and whether you're looking at this session's pane, for the notify mod. Claude Code reports its own status to Rex",
+  "types": "./types/index.d.ts",
   "author": {
     "name": "Steve Godin",
     "url": "https://github.com/whilestevego"
+  },
+  "userConfig": {
+    "tabTitle": {
+      "type": "boolean",
+      "title": "Rex: tab title",
+      "description": "Name the tab with a 4-word summary of the session",
+      "default": true
+    },
+    "titleMinutes": {
+      "type": "number",
+      "title": "Rex: minutes between tab titles",
+      "description": "How often the tab title is refreshed while you work",
+      "default": 3
+    }
   }
 }

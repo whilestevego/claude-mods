@@ -1,6 +1,20 @@
-import type { EngineInterface, Register } from 'claude-code'
-// The contract this mod answers, $.terminal.isFocused, is declared with the ghostty mod's.
-import type {} from '../../ghostty/types'
+import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+import type {} from '../types'
+
+import { ask, clean, context } from './title'
+
+type Config = { tabTitle: boolean; titleMinutes: number }
+
+function config(o: PluginOptions): Config {
+  return {
+    tabTitle: o.tabTitle !== false,
+    titleMinutes: typeof o.titleMinutes === 'number' && o.titleMinutes > 0 ? o.titleMinutes : 3,
+  }
+}
+
+let cfg: Config
+let home = ''
+let titledAt = 0
 
 /** Rex's CLI and this session's pane, set at session start; empty outside Rex. */
 const rex = { bin: '', session: '', block: '' }
@@ -22,6 +36,17 @@ export function isShown(front: string, view: string, session: string, block: str
   }
 }
 
+type View = { active_window_id?: string; windows?: { window_id: string; focused_block_id?: string; layers?: { blocks?: { block_id: string }[] }[] }[] }
+
+/** The tab (window) that holds `block`, from `rex session inspect --json`. */
+export function windowOf(view: string, block: string): string | undefined {
+  try {
+    return (JSON.parse(view) as View).windows?.find(w => w.layers?.some(l => l.blocks?.some(b => b.block_id === block)))?.window_id
+  } catch {
+    return undefined
+  }
+}
+
 async function isFocused($: EngineInterface): Promise<boolean> {
   const front = await $.process.run(['osascript', '-e', FRONT])
   if (front.exitCode !== 0 || !front.stdout.startsWith('true')) return false
@@ -29,15 +54,81 @@ async function isFocused($: EngineInterface): Promise<boolean> {
   return view.exitCode === 0 && isShown(front.stdout, view.stdout, rex.session, rex.block)
 }
 
-export const register: Register = on => {
-  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), terminal: { isFocused: async () => false } }))
+// ─── Tab title ───────────────────────────────────────────────────────────────
 
-  on('terminal.isFocused', async ($, e, next) => (rex.block ? { value: await isFocused($).catch(() => false) } : next(e)))
+/** Names this pane's tab. A tab label is not the terminal title, so Claude Code's own title never overwrites it. */
+async function label($: EngineInterface, words: string) {
+  const view = await $.process.run([rex.bin, 'session', 'inspect', rex.session, '--json'])
+  const window = view.exitCode === 0 ? windowOf(view.stdout, rex.block) : undefined
+  if (window) await $.process.run([rex.bin, 'window', 'rename', '-s', rex.session, window, words])
+}
+
+// Each conversation's title, shared with the ghostty mod, so a resumed conversation gets its title back in either terminal.
+const titleDir = () => `${home}/Library/Caches/claude-ghostty/titles`
+const titleFile = (sessionId?: string) => (home && sessionId && /^[0-9a-f-]{8,64}$/i.test(sessionId) ? `${titleDir()}/${sessionId}` : undefined)
+
+/** A new title from the transcript. `answer`: the reply that just ended, which the transcript may not hold yet. */
+async function retitle($: EngineInterface, answer?: string): Promise<string> {
+  const c = context(await $.session.messages())
+  if (c.prompts.length === 0) return ''
+  const r = await $.model.complete({ model: 'haiku', prompt: ask(c.prompts, answer ?? c.answer), maxTokens: 24 })
+  const words = r.isAnswered ? clean(r.text) : ''
+  if (!words) return ''
+  await label($, words)
+  const file = titleFile(await $.session.id())
+  if (file) await $.process.run(['mkdir', '-p', titleDir()]).then(() => $.fs.write(file, words)).catch(() => {})
+  return words
+}
+
+/** The title this conversation had, or a new one when it has history but no title yet. */
+async function restoreTitle($: EngineInterface) {
+  const file = titleFile(await $.session.id())
+  const saved = file ? clean(await $.fs.read(file).catch(() => '')) : ''
+  titledAt = Date.now()
+  if (saved) await label($, saved)
+  else await retitle($)
+}
+
+export const register: Register = (on, options) => {
+  cfg = config(options)
+
+  // $.rex.isFocused: notify asks whether you're looking at this session. False outside Rex.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), rex: { isFocused: async () => false } }))
+
+  on('rex.isFocused', async $ => ({ value: rex.block !== '' && (await isFocused($).catch(() => false)) }))
 
   on('session.start', async ($, e, next) => {
     const bin = await $.env.get('REX_BIN_DIR')
     if (((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() === 'rex' && bin) {
       Object.assign(rex, { bin: `${bin}/rex`, session: (await $.env.get('REX_SESSION')) ?? '', block: (await $.env.get('REX_BLOCK')) ?? '' })
+    }
+    if (!rex.block || !cfg.tabTitle) return next(e)
+    home = (await $.env.get('HOME')) ?? ''
+    void restoreTitle($).catch(() => {})
+    await $.command.register({ name: 'title', description: 'A new 4-word tab title for this session, now' })
+    return next(e)
+  })
+
+  on('command.run', { command: 'title' }, async $ => {
+    titledAt = Date.now()
+    const words = await retitle($).catch(() => '')
+    return { text: words ? `Tab title: ${words}` : 'Nothing to summarize yet: send a message first.' }
+  })
+
+  // /clear starts a new conversation in the same pane: its first title comes with the next finished turn.
+  on('session.end', async ($, e, next) => {
+    if (rex.block && cfg.tabTitle && e.reason === 'clear') {
+      titledAt = 0
+      await label($, 'Claude Code').catch(() => {})
+    }
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const now = Date.now()
+    if (rex.block && cfg.tabTitle && !e.agentId && now - titledAt >= cfg.titleMinutes * 60_000) {
+      titledAt = now
+      void retitle($, e.answer).catch(() => {})
     }
     return next(e)
   })
