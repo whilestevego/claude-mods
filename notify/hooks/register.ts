@@ -2,11 +2,12 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { channel, checkinLine, doing, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 import type { Channel } from './lines'
-// The contracts this mod reads: tldr's line for a turn, say's voice, and the terminal mod's focus. A renamed key there fails
+// The contracts this mod reads: tldr's line for a turn, say's voice, and the terminal mods' focus. A renamed key there fails
 // type-checking here.
 import type {} from '../../tldr/types'
 import type {} from '../../say/types'
 import type {} from '../../ghostty/types'
+import type {} from '../../rex/types'
 
 type Config = {
   when: string
@@ -44,7 +45,7 @@ const HINTED = 'hintedTest'
 
 /** System Settings' Notifications page: the banner app's own entry in Ghostty and Rex, the whole list elsewhere. */
 const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension'
-const NOTIFIER_ID = 'com.whilestevego.claude-notify.app'
+const NOTIFIER_ID = 'com.whilestevego.claude-notify'
 
 const HELP = [
   '/notify test      send a desktop notification now, to check they show up',
@@ -116,15 +117,14 @@ async function banner($: EngineInterface, text: string): Promise<string | undefi
   return sent.isSent ? undefined : sent.reason
 }
 
-// Quiet by default: alert only when this session isn't the one in front of you. The terminal mod (ghostty, rex) knows; without it
+// Quiet by default: alert only when this session isn't the one in front of you. The terminal mods know, each only in its
+// own terminal: ghostty and rex answer false elsewhere, and a mod that isn't loaded fails its call. Without either,
 // nothing can tell, so every alert goes out.
 async function isAway($: EngineInterface): Promise<boolean> {
   if (cfg.when === 'always') return true
-  try {
-    return !(await $.terminal.isFocused())
-  } catch {
-    return true
-  }
+  const answers = await Promise.allSettled([(async () => $.ghostty.isFocused())(), (async () => $.rex.isFocused())()])
+  if (answers.every(a => a.status === 'rejected')) return true
+  return !answers.some(a => a.status === 'fulfilled' && a.value)
 }
 
 /** One alert, on the channels its setting names: a banner (see banner) and the say mod's voice, when it's loaded. */

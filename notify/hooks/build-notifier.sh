@@ -8,6 +8,11 @@ src="$1/hooks/notifier.swift" app="$1/.build/Claude Notify.app"
 bin="$app/Contents/MacOS/claude-notify"
 icon="$1/icon.png"
 [ "$bin" -nt "$src" ] && [ "$bin" -nt "$0" ] && { [ ! -f "$icon" ] || [ "$bin" -nt "$icon" ]; } && exit 0
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# A killed build leaves its folder behind, and macOS can launch that stale copy for a banner click.
+for old in "$1"/.build/tmp.*; do
+  [ -d "$old" ] && ! kill -0 "${old##*.}" 2>/dev/null && { "$lsregister" -u "$old/Claude Notify.app" 2>/dev/null; rm -rf "$old"; }
+done
 tmp="$1/.build/tmp.$$"
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/Claude Notify.app/Contents/MacOS" "$tmp/Claude Notify.app/Contents/Resources" "$tmp/AppIcon.iconset"
@@ -15,7 +20,7 @@ cat > "$tmp/Claude Notify.app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleIdentifier</key><string>com.whilestevego.claude-notify.app</string>
+  <key>CFBundleIdentifier</key><string>com.whilestevego.claude-notify</string>
   <key>CFBundleName</key><string>Claude Notify</string>
   <key>CFBundleExecutable</key><string>claude-notify</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -35,4 +40,4 @@ iconutil -c icns "$tmp/AppIcon.iconset" -o "$tmp/Claude Notify.app/Contents/Reso
 codesign --force --sign - "$tmp/Claude Notify.app"
 rm -rf "$app"
 mv "$tmp/Claude Notify.app" "$app"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
+"$lsregister" -f "$app"

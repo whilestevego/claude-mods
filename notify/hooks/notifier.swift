@@ -33,26 +33,56 @@ on run argv
 end run
 """
 
-// Rex's sessions have ids "<host>/session:…", the CLI's only the part after the slash.
-let SHOW_REX = """
-on run argv
-  tell application "Rex"
-    repeat with s in sessions
-      if (id of s) ends with ("/" & item 1 of argv) then
-        show s
-        return
-      end if
-    end repeat
-  end tell
-end run
-"""
-
+/** Runs a command; a failure goes to ~/Library/Logs/Claude Notify.log, since a click has nowhere else to say why. */
 func run(_ path: String, _ args: [String]) {
   let p = Process()
+  let err = Pipe()
   p.executableURL = URL(fileURLWithPath: path)
   p.arguments = args
-  try? p.run()
+  p.standardError = err
+  do { try p.run() } catch { return log("\(path): \(error.localizedDescription)") }
   p.waitUntilExit()
+  if p.terminationStatus != 0 {
+    log("\(path) \(args.last ?? ""): exit \(p.terminationStatus): \(String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))")
+  }
+}
+
+/** A command's output, or nothing when it fails. */
+func output(_ path: String, _ args: [String]) -> Data {
+  let p = Process()
+  let out = Pipe()
+  p.executableURL = URL(fileURLWithPath: path)
+  p.arguments = args
+  p.standardOutput = out
+  guard (try? p.run()) != nil else { return Data() }
+  let data = out.fileHandleForReading.readDataToEndOfFile()
+  p.waitUntilExit()
+  return p.terminationStatus == 0 ? data : Data()
+}
+
+/**
+ * Brings you to a Rex pane. `rex focus` only moves the server's focus: the Rex app keeps the tab it shows, so each Mac
+ * app attached to the session is asked to show the pane's tab (session.select, which needs Remote Control).
+ */
+func showRex(_ rex: String, session: String, block: String) {
+  run(rex, ["focus", "-s", session, block])
+  let view = (try? JSONSerialization.jsonObject(with: output(rex, ["session", "inspect", session, "--json"]))) as? [String: Any]
+  if let window = view?["active_window_id"] as? String {
+    for client in view?["clients"] as? [[String: Any]] ?? [] {
+      let info = client["info"] as? [String: Any]
+      guard info?["kind"] as? String == "app", info?["platform"] as? String == "macos", let id = client["client_id"] as? String else { continue }
+      run(rex, ["-C", id, "do", "session.select", "session_id=\(session)", "window_id=\(window)"])
+    }
+  } else {
+    log("rex session inspect \(session): no active window")
+  }
+  run("/usr/bin/osascript", ["-e", "tell application \"Rex\" to activate"])
+}
+
+func log(_ line: String) {
+  let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Claude Notify.log")
+  let text = Data("\(Date()) \(line)\n".utf8)
+  if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(text); try? h.close() } else { try? text.write(to: url) }
 }
 
 final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -96,8 +126,7 @@ final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
     if let target = response.notification.request.content.userInfo["tty"] as? String {
       let rex = target.split(separator: "|").map(String.init)
       if rex.count == 4, rex[0] == "rex" {
-        run(rex[1], ["focus", "-s", rex[2], rex[3]])
-        run("/usr/bin/osascript", ["-e", SHOW_REX, rex[2]])
+        showRex(rex[1], session: rex[2], block: rex[3])
       } else {
         run("/usr/bin/osascript", ["-e", FOCUS, target])
       }
