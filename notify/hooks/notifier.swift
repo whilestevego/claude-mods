@@ -2,8 +2,10 @@
 // window to your Space, which Ghostty's own notification click does for a background tab. Or to the Rex pane that sent
 // it. Built by build-notifier.sh.
 //   claude-notify post <title> <body> <target>   post one banner and exit; target: a Ghostty tty, or rex|<rex>|<session>|<block>
-//   claude-notify icon <png>                  draw the app's icon (the build does)
-//   (launched by macOS for a click)           focus the tab the banner names, then exit
+//   claude-notify set-icon [<image or app>]      make it the app's icon and rebuild; without one, back to 🔔
+//   claude-notify forget <app id>                remove an old Claude Notify ID from macOS (the build does, after set-icon)
+//   claude-notify icon <png>                     draw 🔔 as the icon (the build does, when there is no icon.png)
+//   (launched by macOS for a click)              focus the tab the banner names, then exit
 import AppKit
 import UserNotifications
 
@@ -142,18 +144,115 @@ final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
   }
 }
 
-// The build draws the app's icon with the binary itself: 🔔 on a clear 1024 px square.
-if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "icon" {
-  let side = 1024
-  let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8, samplesPerPixel: 4,
+// ─── Commands run from a shell ───────────────────────────────────────────────
+
+/** The mod folder: this app is <mod>/.build/Claude Notify.app. */
+let modRoot = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
+
+/** Runs a command quietly and returns its exit status. */
+@discardableResult
+func status(_ path: String, _ args: [String]) -> Int32 {
+  let p = Process()
+  p.executableURL = URL(fileURLWithPath: path)
+  p.arguments = args
+  p.standardOutput = FileHandle.nullDevice
+  p.standardError = FileHandle.nullDevice
+  guard (try? p.run()) != nil else { return -1 }
+  p.waitUntilExit()
+  return p.terminationStatus
+}
+
+func fail(_ message: String) -> Never {
+  FileHandle.standardError.write(Data("claude-notify: \(message)\n".utf8))
+  exit(2)
+}
+
+/** Draws `image`, or 🔔 without one, on a clear 1024 px square, as a PNG at `path`. */
+func drawIcon(_ image: NSImage?, to path: String) {
+  let side = CGFloat(1024)
+  let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(side), pixelsHigh: Int(side), bitsPerSample: 8, samplesPerPixel: 4,
                              hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
   NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-  let bell = NSAttributedString(string: "🔔", attributes: [.font: NSFont.systemFont(ofSize: CGFloat(side) * 0.78)])
-  let size = bell.size()
-  bell.draw(at: NSPoint(x: (CGFloat(side) - size.width) / 2, y: (CGFloat(side) - size.height) / 2))
+  if let image {
+    image.draw(in: NSRect(x: 0, y: 0, width: side, height: side))
+  } else {
+    let bell = NSAttributedString(string: "🔔", attributes: [.font: NSFont.systemFont(ofSize: side * 0.78)])
+    let size = bell.size()
+    bell.draw(at: NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2))
+  }
   NSGraphicsContext.current = nil
-  try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
-  exit(0)
+  do { try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path)) } catch { fail("\(path): \(error.localizedDescription)") }
+}
+
+/**
+ * Makes `path` (an image, or an app for its own icon at full size) the icon, as <mod>/icon.png, and rebuilds. The new
+ * icon gives the app a new ID: see build-notifier.sh.
+ */
+func setIcon(_ path: String?) -> Int32 {
+  let icon = modRoot.appendingPathComponent("icon.png").path
+  if let path {
+    let image = path.hasSuffix(".app") ? NSWorkspace.shared.icon(forFile: path) : NSImage(contentsOfFile: path)
+    guard let image, image.isValid, FileManager.default.fileExists(atPath: path) else { fail("\(path) is not an image or an app") }
+    drawIcon(image, to: icon)
+  } else {
+    try? FileManager.default.removeItem(atPath: icon)
+  }
+  let p = Process()
+  p.executableURL = URL(fileURLWithPath: "/bin/sh")
+  p.arguments = [modRoot.appendingPathComponent("hooks/build-notifier.sh").path, modRoot.path]
+  do { try p.run() } catch { fail("build: \(error.localizedDescription)") }
+  p.waitUntilExit()
+  return p.terminationStatus
+}
+
+/**
+ * Removes a Claude Notify ID from macOS, so System Settings → Notifications no longer lists it. macOS keeps the list in
+ * usernoted's settings file and rebuilds usernoted's database rows from it, so both change. usernoted writes its memory
+ * back when it stops, so it is frozen meanwhile, then killed (launchd restarts it). Both files are backed up first.
+ */
+func forget(_ id: String) -> Int32 {
+  guard id.hasPrefix("com.whilestevego.claude-notify"), id.allSatisfy({ $0.isLetter || $0.isNumber || ".-".contains($0) }) else {
+    fail("forget only takes a Claude Notify ID (com.whilestevego.claude-notify…)")
+  }
+  let files = FileManager.default
+  let group = files.homeDirectoryForCurrentUser.appendingPathComponent("Library/Group Containers/group.com.apple.usernoted")
+  let prefs = group.appendingPathComponent("Library/Preferences/group.com.apple.usernoted.plist")
+  let db = group.appendingPathComponent("db2/db").path
+  let backup = files.temporaryDirectory.appendingPathComponent("claude-notify-forget.\(getpid())")
+  do {
+    try files.createDirectory(at: backup, withIntermediateDirectories: true)
+    try files.copyItem(at: prefs, to: backup.appendingPathComponent(prefs.lastPathComponent))
+  } catch { fail("backup: \(error.localizedDescription)") }
+  guard status("/usr/bin/sqlite3", ["-readonly", db, ".backup '\(backup.appendingPathComponent("db").path)'"]) == 0 else { fail("backup of \(db) failed") }
+
+  // Permissions (control of Ghostty and Rex): tccutil only knows an ID while an app with it is registered.
+  status("/usr/bin/tccutil", ["reset", "All", id])
+
+  status("/usr/bin/killall", ["-STOP", "usernoted"])
+  defer { status("/usr/bin/killall", ["-CONT", "usernoted"]) }
+  guard let data = try? Data(contentsOf: prefs),
+        var settings = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else { fail("can't read \(prefs.path)") }
+  settings["apps"] = (settings["apps"] as? [[String: Any]] ?? []).filter { $0["bundle-id"] as? String != id }
+  do {
+    try PropertyListSerialization.data(fromPropertyList: settings, format: .binary, options: 0).write(to: prefs)
+  } catch { fail("can't write \(prefs.path): \(error.localizedDescription)") }
+  let rows = "select app_id from app where identifier = '\(id)'"
+  let sql = "pragma busy_timeout = 3000; begin;" + ["record", "categories", "delivered", "displayed", "requests", "snoozed"]
+    .map { " delete from \($0) where app_id in (\(rows));" }.joined() + " delete from app where identifier = '\(id)'; commit;"
+  guard status("/usr/bin/sqlite3", [db, sql]) == 0 else { fail("can't change \(db); backups in \(backup.path)") }
+  status("/usr/bin/killall", ["cfprefsd"])
+  status("/usr/bin/killall", ["-KILL", "usernoted"])
+  status("/usr/bin/killall", ["NotificationCenter"])
+  print("Forgot \(id). Backups: \(backup.path)")
+  return 0
+}
+
+let args = Array(CommandLine.arguments.dropFirst())
+switch (args.first, args.count) {
+case ("icon", 2): drawIcon(nil, to: args[1]); exit(0)
+case ("set-icon", 1), ("set-icon", 2): exit(setIcon(args.count == 2 ? args[1] : nil))
+case ("forget", 2): exit(forget(args[1]))
+default: break
 }
 
 let app = NSApplication.shared

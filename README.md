@@ -72,13 +72,14 @@ Without it, nothing can tell whether you're looking, so it always tells you.
   from source the first time it starts. Each one is titled with the session's folder, so you
   can tell sessions apart.
 - **Claude Notify's icon** is `notify/icon.png` when that file exists, else 🔔. To change it,
-  run `sh notify/hooks/set-notifier-icon.sh notify <image>`, where `<image>` is a `.png`, an
-  `.icns` or an app, such as `/Applications/Rex.app`. Leave out `<image>` to go back to 🔔.
-  macOS caches a banner's icon by app ID, so each icon gets its own ID. The build removes the
-  old ID from macOS, and macOS asks once more to allow banners and control of the terminal.
+  run `"notify/.build/Claude Notify.app/Contents/MacOS/claude-notify" set-icon <image>`, where
+  `<image>` is an image file or an app, such as `/Applications/Rex.app` (its icon at full
+  size). Leave out `<image>` to go back to 🔔. macOS caches a banner's icon by app ID, so each
+  icon gets its own ID. The build removes the old ID from macOS, and macOS asks once more to
+  allow banners and control of the terminal.
 - **An old Claude Notify ID** that is still in System Settings → Notifications:
-  `sh notify/hooks/forget-notifier.sh <id>` removes it from macOS. It only accepts Claude
-  Notify's own IDs.
+  `claude-notify forget <id>` (the same program) removes it from macOS. It only accepts
+  Claude Notify's own IDs.
 - Without say, `voice` alerts are skipped and the banners still go out.
 
 | Command | What it does |
@@ -192,6 +193,22 @@ Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`
 
 3. Start a new Claude session.
 
+To load the ghostty mod only in Ghostty and the rex mod only in Rex, set the list in your
+shell's startup file in place of `settings.json`. A value in `settings.json` applies in every
+terminal. In zsh, put this in `~/.zshenv`, which runs for every zsh, also when `ZDOTDIR` is set:
+
+```sh
+mods="$HOME/claude-mods"
+CLAUDE_CODE_PLUGIN_DIRS="$mods/context-bar:$mods/notify:$mods/say"
+case "$TERM_PROGRAM" in
+  ghostty) CLAUDE_CODE_PLUGIN_DIRS="$CLAUDE_CODE_PLUGIN_DIRS:$mods/ghostty" ;;
+  rex) CLAUDE_CODE_PLUGIN_DIRS="$CLAUDE_CODE_PLUGIN_DIRS:$mods/rex" ;;
+esac
+export CLAUDE_CODE_PLUGIN_DIRS
+```
+
+A Claude session that no shell starts, such as one an editor starts, then loads no mods.
+
 To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/tldr`.
 
 ## Requirements
@@ -199,7 +216,7 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
 - **ghostty** needs Ghostty 1.3 or newer on macOS. Set
   `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` in Ghostty only, so Claude Code doesn't overwrite
   the tab title. That variable also stops Claude Code's status reports to Rex. In
-  `~/.zshrc`: `[ "$TERM_PROGRAM" = ghostty ] && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`.
+  `~/.zshenv`: `[ "$TERM_PROGRAM" = ghostty ] && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`.
 - **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
 - **notify**'s desktop notifications need notifications allowed in System Settings →

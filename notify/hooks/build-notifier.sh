@@ -1,11 +1,11 @@
 #!/bin/sh
 # build-notifier.sh <mod folder>: builds notifier.swift into <mod folder>/.build/Claude Notify.app, signed ad hoc and
 # registered with LaunchServices (macOS only lets an app bundle post banners). Its icon is <mod folder>/icon.png, or 🔔
-# without one (set-notifier-icon.sh sets it). Skipped while the build is current. Built in a folder of its own and moved
+# without one (claude-notify set-icon sets it). Skipped while the build is current. Built in a folder of its own and moved
 # into place, so sessions starting together don't run a half-built app. Prints the app's ID.
 #
 # macOS caches a banner's icon by app ID, and no restart clears it, so the ID carries a hash of the icon: a new icon is a
-# new app to macOS. The old ID is then removed from macOS (forget-notifier.sh), and banners need permission once more.
+# new app to macOS. The old app then removes its ID from macOS (claude-notify forget), and banners need permission once more.
 set -e
 src="$1/hooks/notifier.swift" app="$1/.build/Claude Notify.app"
 bin="$app/Contents/MacOS/claude-notify"
@@ -45,7 +45,7 @@ done
 iconutil -c icns "$tmp/AppIcon.iconset" -o "$tmp/Claude Notify.app/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$tmp/Claude Notify.app" 2>/dev/null
 # Forgotten while the old app is still registered, so its permissions can be reset too.
-[ -n "$built" ] && [ "$built" != "$id" ] && sh "$1/hooks/forget-notifier.sh" "$built" >&2
+[ -n "$built" ] && [ "$built" != "$id" ] && "$bin" forget "$built" >&2
 rm -rf "$app"
 mv "$tmp/Claude Notify.app" "$app"
 "$lsregister" -f "$app"
