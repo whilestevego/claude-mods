@@ -6,9 +6,9 @@ one mod. Turn on the ones you want (see [Setup](#setup)) and change their settin
 
 Each mod works on its own, and a few work better together. **notify** tells you when
 something happens; with **say** it can tell you out loud, with **tldr** its turn summaries
-reuse tldr's line instead of writing their own, and with **ghostty** it stays quiet while
-you're looking at the session. In Ghostty, clicking its notification brings you back to the
-session's tab.
+reuse tldr's line instead of writing their own, and with **ghostty** or **rex** it stays quiet
+while you're looking at the session. In Ghostty and Rex, clicking its notification brings you
+back to the session's tab.
 
 ## The mods
 
@@ -54,7 +54,7 @@ Adds a one-sentence summary under Claude's longer replies, written by Claude Hai
 ### notify
 
 Tells you when something happens in a session: as a desktop notification, out loud
-through say, or both. With the ghostty mod on, it only tells you when you're away from the
+through say, or both. With the ghostty or rex mod on, it only tells you when you're away from the
 session (another app or tab in front), so it never interrupts you while you're watching.
 Without it, nothing can tell whether you're looking, so it always tells you.
 
@@ -67,16 +67,19 @@ Without it, nothing can tell whether you're looking, so it always tells you.
   `both`, `banner` (the desktop notification), `voice` (spoken by say) or `off`. By default
   the first three are `both`, and background tasks and check-ins are `voice`.
 - **Clicking a notification** in Ghostty brings you to the tab of the session that sent it,
-  switching to its Space rather than pulling its window over. In Ghostty the banners come
-  from Claude Notify, a small app notify builds from source the first time it starts.
-  Each one is titled with the session's folder, so you can tell sessions apart.
+  switching to its Space rather than pulling its window over. In Rex it brings you to the
+  session's pane. In both, the banners come from Claude Notify, a small app notify builds
+  from source the first time it starts. Each one is titled with the session's folder, so you
+  can tell sessions apart.
+- **Claude Notify's icon** is `notify/icon.png` when that file exists, else 🔔. Changing the
+  file rebuilds the app at the next session start.
 - Without say, `voice` alerts are skipped and the banners still go out.
 
 | Command | What it does |
 |---|---|
 | `/notify test` | Sends a desktop notification right away. macOS can't tell a mod whether your terminal may show notifications, so this is how to check. The first time notify starts, it reminds you once. |
 | `/notify haiku` | The same, with a fresh haiku from Claude Haiku as its text. |
-| `/notify settings` | Opens the switch in System Settings: Claude Notify's entry in Ghostty, the Notifications list elsewhere. |
+| `/notify settings` | Opens the switch in System Settings: Claude Notify's entry in Ghostty and Rex, the Notifications list elsewhere. |
 
 ### say
 
@@ -114,15 +117,8 @@ Ties Claude into the [Ghostty](https://ghostty.org) terminal. All its settings s
 - **❓ waiting on you:** a ❓ in the tab title when Claude needs a permission or an answer.
   The notify mod sends the notification.
 - **`/workspace`** saves and reopens whole windows of sessions: see [Workspaces](#workspaces).
-- **`/goto`** lists your open Claude sessions, the ones waiting on you first,
-  and jumps to the one you pick. `/goto next` jumps straight to the one waiting longest;
-  `/goto <words>` jumps to the one whose title matches.
-- **`/keybind add <keys> <text>`** makes a Ghostty key type something into Claude, like
-  `/keybind add super+ctrl+h /say hush` for ⌘⌃H. `/keybind` lists them, and
-  `/keybind remove <keys>` removes one. For ⌘⌃G to open `/goto`, run
-  `/keybind add super+ctrl+g /goto`, or turn on **Ghostty: install Claude keybinds** in `/config`.
-  The mod changes your Ghostty config only when you do one of these: it adds one line that loads
-  its own `claude-keybinds` file.
+
+In other terminals the ghostty mod does nothing.
 
 #### Workspaces
 
@@ -148,6 +144,16 @@ up where it left off.
 - **Where they're kept:** `~/.claude/workspaces/`, one JSON file per workspace. Saving never
   overwrites a different workspace that happens to have the same name: the new one gets a file of its own.
 
+### rex
+
+Ties Claude into the [Rex](https://www.superlogical.com/rex) terminal. Claude Code already
+reports its status to Rex (tab dots, Dock badge, sounds), so this mod only tells notify
+whether you're looking at the session: Rex is in front, on this session, with this pane
+focused. With several Rex windows open, Rex only names the session of the window you used
+last, so the answer can be wrong. In other terminals the rex mod does nothing.
+
+Turn off Rex's own system notifications for program activity, so notify sends the only banner.
+
 ## Setup
 
 Install the mods you want, one line each, at the prompt of a Claude Code session:
@@ -157,7 +163,7 @@ Install the mods you want, one line each, at the prompt of a Claude Code session
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`,
-`rate-limits`, `session-info`, `turn-receipt`, `tldr`, `notify`, `say` and `ghostty`.
+`rate-limits`, `session-info`, `turn-receipt`, `tldr`, `notify`, `say`, `ghostty` and `rex`.
 
 ### From a clone, while working on them
 
@@ -178,17 +184,18 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
 ## Requirements
 
 - **ghostty** needs Ghostty 1.3 or newer on macOS. Set
-  `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` in the same `env` block, so Claude Code doesn't
-  overwrite the tab title.
+  `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` in Ghostty only, so Claude Code doesn't overwrite
+  the tab title. That variable also stops Claude Code's status reports to Rex. In
+  `~/.zshrc`: `[ "$TERM_PROGRAM" = ghostty ] && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`.
 - **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
 - **notify**'s desktop notifications need notifications allowed in System Settings →
-  Notifications: for Claude Notify in Ghostty, which needs the Xcode command line tools
+  Notifications: for Claude Notify in Ghostty and Rex, which needs the Xcode command line tools
   (`swiftc`) to build, or for your terminal elsewhere. `/notify test` checks;
   `/notify settings` opens the page.
 - **session-info**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 
-The first time a mod controls Ghostty, macOS asks for permission. Allow it.
+The first time a mod controls Ghostty or Rex, macOS asks for permission. Allow it.
 
 ## Development
 
@@ -201,7 +208,7 @@ claude plugin test context-bar       # run its tests
 ```
 
 Mods can call each other through nouns on `$`: say adds `$.voice.say({ text })`, which
-notify speaks through, and ghostty adds `$.ghostty.isFocused()`, which notify asks before
-alerting. Their types are in each mod's `types/index.d.ts`.
+notify speaks through, and ghostty and rex add `$.terminal.isFocused()`, which notify asks
+before alerting. Each answers only in its own terminal and passes the question on elsewhere. Their types are in each mod's `types/index.d.ts`.
 
 [IDEAS.md](IDEAS.md) has ideas for more mods.

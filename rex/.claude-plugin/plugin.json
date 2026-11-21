@@ -1,0 +1,9 @@
+{
+  "name": "rex",
+  "version": "0.1.0",
+  "description": "Rex integration: tells other mods (notify) whether you're looking at this session's pane. Claude Code reports its own status to Rex",
+  "author": {
+    "name": "Steve Godin",
+    "url": "https://github.com/whilestevego"
+  }
+}
