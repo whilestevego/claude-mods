@@ -1,6 +1,7 @@
 // Claude Notify: the notify mod's banners. A click brings you to the Ghostty tab that sent it, without pulling its
-// window to your Space, which Ghostty's own notification click does for a background tab. Built by build-notifier.sh.
-//   claude-notify post <title> <body> <tty>   post one banner and exit
+// window to your Space, which Ghostty's own notification click does for a background tab. Or to the Rex pane that sent
+// it. Built by build-notifier.sh.
+//   claude-notify post <title> <body> <target>   post one banner and exit; target: a Ghostty tty, or rex|<rex>|<session>|<block>
 //   claude-notify icon <png>                  draw the app's icon (the build does)
 //   (launched by macOS for a click)           focus the tab the banner names, then exit
 import AppKit
@@ -31,6 +32,28 @@ on run argv
   end tell
 end run
 """
+
+// Rex's sessions have ids "<host>/session:…", the CLI's only the part after the slash.
+let SHOW_REX = """
+on run argv
+  tell application "Rex"
+    repeat with s in sessions
+      if (id of s) ends with ("/" & item 1 of argv) then
+        show s
+        return
+      end if
+    end repeat
+  end tell
+end run
+"""
+
+func run(_ path: String, _ args: [String]) {
+  let p = Process()
+  p.executableURL = URL(fileURLWithPath: path)
+  p.arguments = args
+  try? p.run()
+  p.waitUntilExit()
+}
 
 final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
   let center = UNUserNotificationCenter.current()
@@ -70,12 +93,14 @@ final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
   // A click (or the banner's default action).
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                               withCompletionHandler done: @escaping () -> Void) {
-    if let tty = response.notification.request.content.userInfo["tty"] as? String {
-      let osa = Process()
-      osa.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-      osa.arguments = ["-e", FOCUS, tty]
-      try? osa.run()
-      osa.waitUntilExit()
+    if let target = response.notification.request.content.userInfo["tty"] as? String {
+      let rex = target.split(separator: "|").map(String.init)
+      if rex.count == 4, rex[0] == "rex" {
+        run(rex[1], ["focus", "-s", rex[2], rex[3]])
+        run("/usr/bin/osascript", ["-e", SHOW_REX, rex[2]])
+      } else {
+        run("/usr/bin/osascript", ["-e", FOCUS, target])
+      }
     }
     done()
     exit(0)

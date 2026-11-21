@@ -13,18 +13,18 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   /** Where a click on each Claude Notify banner goes: its tty. */
   const clicksTo: string[] = []
   on('ui.notify', (_$, e) => (told.push(`banner:${e.title}|${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
-  // Stand-ins for the say mod ($.voice) and the ghostty mod ($.ghostty), each answered by a hook below.
+  // Stand-ins for the say mod ($.voice) and the ghostty mod ($.terminal), each answered by a hook below.
   on('engine.create', async (_$, e, next) => ({
     ...(await next(e)),
     ...(hasVoice && { voice: { say: async () => ({ isSpoken: false }) } }),
-    ...(hasGhostty && { ghostty: { isFocused: async () => false } }),
+    ...(hasGhostty && { terminal: { isFocused: async () => false } }),
   }))
   if (hasVoice) {
     on('voice.say', (_$, e) => (told.push(`voice:${e.text}`), { value: { isSpoken: true } }))
   }
   // This session is in front when Ghostty's focused terminal is ttys004.
   if (hasGhostty) {
-    on('ghostty.isFocused', () => ({ value: focused.tty === '/dev/ttys004' }))
+    on('terminal.isFocused', () => ({ value: focused.tty === '/dev/ttys004' }))
   }
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]

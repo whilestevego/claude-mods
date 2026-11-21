@@ -2,7 +2,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { channel, checkinLine, doing, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 import type { Channel } from './lines'
-// The contracts this mod reads: tldr's line for a turn, say's voice, and ghostty's focus. A renamed key there fails
+// The contracts this mod reads: tldr's line for a turn, say's voice, and the terminal mod's focus. A renamed key there fails
 // type-checking here.
 import type {} from '../../tldr/types'
 import type {} from '../../say/types'
@@ -42,7 +42,7 @@ const WARNED = 'warnedLimits'
 /** Set once the /notify test hint has been shown: in $.store, so it shows once, not once per session. */
 const HINTED = 'hintedTest'
 
-/** System Settings' Notifications page: the banner app's own entry in Ghostty, the whole list elsewhere. */
+/** System Settings' Notifications page: the banner app's own entry in Ghostty and Rex, the whole list elsewhere. */
 const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension'
 const NOTIFIER_ID = 'com.whilestevego.claude-notify.app'
 
@@ -59,9 +59,10 @@ let pid = ''
 /** Claude's terminal: a click on its banner comes back to this tab. */
 let tty = ''
 let home = ''
-/** Claude Notify.app, built at session start: banners in Ghostty go through it. Its build error when it couldn't be. */
+/** Claude Notify.app, built at session start: banners in Ghostty and Rex go through it. Its build error when it couldn't be. */
 let notifier: Promise<{ app: string } | { error: string }> = Promise.resolve({ error: 'not built yet' })
-let inGhostty = false
+/** Where a click on a Claude Notify banner goes: the Ghostty tty, or rex|<rex>|<session>|<block>. Unset: Claude Code sends banners. */
+let target: string | undefined
 /** The session's folder name, heading its banners so you can tell sessions apart. */
 let folder = ''
 let lastRequest = ''
@@ -82,11 +83,14 @@ while [ "$p" -gt 1 ]; do
 done`
 
 async function locate($: EngineInterface) {
-  inGhostty = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() === 'ghostty'
   home = (await $.env.get('HOME')) ?? ''
   const [found = '', term = ''] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(/\s+/)
   pid = found
   tty = term && !term.startsWith('?') ? `/dev/${term}` : ''
+  const program = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase()
+  const bin = await $.env.get('REX_BIN_DIR')
+  const rex = [bin ? `${bin}/rex` : '', (await $.env.get('REX_SESSION')) ?? '', (await $.env.get('REX_BLOCK')) ?? '']
+  target = program === 'ghostty' ? tty : program === 'rex' && rex.every(v => v && !v.includes('|')) ? ['rex', ...rex].join('|') : undefined
 }
 
 /** Builds Claude Notify.app when its source changed. */
@@ -97,27 +101,27 @@ async function buildNotifier($: EngineInterface): Promise<{ app: string } | { er
 }
 
 /**
- * Shows a banner; the reason it couldn't, if it couldn't. In Ghostty it comes from Claude Notify: Ghostty's own banner
- * click pulls a background tab's window over to your Space, Claude Notify's slides to the window's Space instead.
- * Elsewhere Claude Code's channel sends it, since Claude Notify's click only finds Ghostty tabs.
+ * Shows a banner; the reason it couldn't, if it couldn't. In Ghostty and Rex it comes from Claude Notify, with Claude's
+ * icon: Ghostty's own banner click pulls a background tab's window over to your Space, Claude Notify's slides to the
+ * window's Space instead. Elsewhere Claude Code's channel sends it, since Claude Notify's click only finds those two.
  */
 async function banner($: EngineInterface, text: string): Promise<string | undefined> {
-  if (inGhostty) {
+  if (target !== undefined) {
     const built = await notifier
     if ('error' in built) return `Claude Notify couldn't be built: ${built.error}`
-    const r = await $.process.run(['open', '-n', built.app, '--args', 'post', title(), text, tty])
+    const r = await $.process.run(['open', '-n', built.app, '--args', 'post', title(), text, target])
     return r.exitCode === 0 ? undefined : r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`
   }
   const sent = await $.ui.notify(text, { title: title() })
   return sent.isSent ? undefined : sent.reason
 }
 
-// Quiet by default: alert only when this session isn't the one in front of you. The ghostty mod knows; without it
+// Quiet by default: alert only when this session isn't the one in front of you. The terminal mod (ghostty, rex) knows; without it
 // nothing can tell, so every alert goes out.
 async function isAway($: EngineInterface): Promise<boolean> {
   if (cfg.when === 'always') return true
   try {
-    return !(await $.ghostty.isFocused())
+    return !(await $.terminal.isFocused())
   } catch {
     return true
   }
@@ -208,9 +212,9 @@ async function haikuBanner($: EngineInterface): Promise<{ text: string }> {
 }
 
 async function openSettings($: EngineInterface): Promise<{ text: string }> {
-  const r = await $.process.run(['open', inGhostty ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
+  const r = await $.process.run(['open', target !== undefined ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
   if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
-  return { text: `Opened System Settings. Turn on Allow notifications${inGhostty ? ' for Claude Notify' : ''}, then /notify test.` }
+  return { text: `Opened System Settings. Turn on Allow notifications${target !== undefined ? ' for Claude Notify' : ''}, then /notify test.` }
 }
 
 const title = () => (folder ? `Claude Code · ${folder}` : 'Claude Code')
@@ -248,7 +252,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
-    if (inGhostty) notifier = buildNotifier($).catch(e => ({ error: String(e) }))
+    if (target !== undefined) notifier = buildNotifier($).catch(e => ({ error: String(e) }))
     await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test (or haiku) to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)

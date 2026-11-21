@@ -2,3 +2,5 @@
 */.claude-plugin/types/
 .DS_Store
 .build/
+# Anthropic's logo, local only
+notify/icon.png
