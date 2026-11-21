@@ -29,3 +29,35 @@ export function tabTitle(summary: string, isWaiting: boolean): string {
 export function runningBar(hasFailed: boolean): string {
   return hasFailed ? progress(Progress.error, 100) : progress(Progress.busy)
 }
+
+/**
+ * Focuses the terminal with `tty`. Focusing a background tab of a window on another Space pulls the window over to your
+ * Space; focusing the window's selected tab first moves you to the window's Space instead.
+ */
+const FOCUS = `on run argv
+  set target to item 1 of argv
+  tell application "Ghostty"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in terminals of t
+          if tty of s is target then
+            set sid to id of s
+            if not (selected of t) then
+              focus (focused terminal of selected tab of w)
+              delay 0.5
+            end if
+            focus (first terminal whose id is sid)
+            return
+          end if
+        end repeat
+      end repeat
+    end repeat
+  end tell
+end run`
+
+const quote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`
+
+/** The shell command that brings you to the Ghostty terminal with `tty`. */
+export function showCommand(tty: string): string {
+  return `osascript -e ${quote(FOCUS)} ${quote(tty)}`
+}

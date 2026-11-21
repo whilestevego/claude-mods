@@ -3,7 +3,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { WorkspaceRow } from '../types'
 
-import { progress, Progress, runningBar, tabTitle, titleAction } from './term'
+import { progress, Progress, runningBar, showCommand, tabTitle, titleAction } from './term'
 import { asksPermission, parseEntry } from './registry'
 import type { Entry, Status } from './registry'
 import { ask, bare, clean, context } from './title'
@@ -361,11 +361,12 @@ async function deleteWorkspace($: EngineInterface, file: string) {
 
 
 export const register: Register = (on, options) => {
-  // $.ghostty.isFocused: notify asks whether you're looking at this session. The noun's own method holds no `$`, so the
-  // hook below, which has one, does the asking.
-  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), ghostty: { isFocused: async () => false } }))
+  // $.ghostty.isFocused and $.ghostty.showCommand, for notify. The noun's own methods hold no `$`, so the hooks below,
+  // which have one, answer.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), ghostty: { isFocused: async () => false, showCommand: async () => '' } }))
 
   on('ghostty.isFocused', async $ => ({ value: await isFocused($) }))
+  on('ghostty.showCommand', async () => ({ value: tty ? showCommand(tty) : '' }))
 
   cfg = config(options)
   // Hooks that gate a prompt or a tool call pass it on untouched if they fail: the tab must never block work.

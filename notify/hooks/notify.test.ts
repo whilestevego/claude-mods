@@ -8,16 +8,16 @@ declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
  * Fakes the machine: Claude (pid 4242) on ttys004 in Ghostty, `focused` the terminal Ghostty has in front, `files`
  * the disk. What reached you comes back in order, as "banner:<title>|<text>" or "voice:<text>".
  */
-function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true, hasGhostty = true, buildError = '') {
+function machine(on: On, focused: { tty: string }, files: Record<string, string> = {}, store: Record<string, unknown> = { hintedTest: true }, hasVoice = true, hasGhostty = true, addError = '') {
   const told: string[] = []
-  /** Where a click on each Claude Notify banner goes: its tty. */
+  /** Where a click on each herald banner goes: its tty. */
   const clicksTo: string[] = []
   on('ui.notify', (_$, e) => (told.push(`banner:${e.title}|${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
   // Stand-ins for the say mod ($.voice) and the ghostty mod ($.ghostty), each answered by a hook below.
   on('engine.create', async (_$, e, next) => ({
     ...(await next(e)),
     ...(hasVoice && { voice: { say: async () => ({ isSpoken: false }) } }),
-    ...(hasGhostty && { ghostty: { isFocused: async () => false } }),
+    ...(hasGhostty && { ghostty: { isFocused: async () => false, showCommand: async () => '' } }),
   }))
   if (hasVoice) {
     on('voice.say', (_$, e) => (told.push(`voice:${e.text}`), { value: { isSpoken: true } }))
@@ -25,14 +25,18 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   // This session is in front when Ghostty's focused terminal is ttys004.
   if (hasGhostty) {
     on('ghostty.isFocused', () => ({ value: focused.tty === '/dev/ttys004' }))
+    on('ghostty.showCommand', () => ({ value: 'show /dev/ttys004' }))
   }
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
-    if (argv[0] === 'sh' && argv[1]?.endsWith('build-notifier.sh')) return { value: { exitCode: buildError ? 1 : 0, stdout: buildError ? '' : 'com.whilestevego.claude-notify.1a2b3c4d\n', stderr: buildError } } as never
-    if (argv[0] === 'sh') return out('4242 ttys004\n')
-    // Claude Notify: open -n <app> --args post <title> <text> <tty>
-    if (argv[0] === 'open' && argv[4] === 'post') (told.push(`banner:${argv[5]}|${argv[6]}`), clicksTo.push(argv[7]!))
+    // herald: sh -c <script> herald <command> <source> …
+    const herald = argv[0] === 'sh' && argv[3] === 'herald' ? argv.slice(4) : undefined
+    if (herald?.[0] === 'add') return { value: { exitCode: addError ? 3 : 0, stdout: '', stderr: addError } } as never
+    if (herald?.[0] === 'settings') told.push(`settings:${herald[1]}`)
+    // post claude --title <title> --on click <command> -- <text>
+    else if (herald?.[0] === 'post') (told.push(`banner:${herald[3]}|${herald[8]}`), clicksTo.push(herald[6]!))
+    else if (argv[0] === 'sh') return out('4242\n')
     else if (argv[0] === 'open') told.push(`open:${argv[1]}`)
     return out('')
   })
@@ -223,11 +227,11 @@ test('/notify test sends a banner at once, even while this terminal is focused',
   expect(told).toEqual([`banner:${TITLE}|This is what notify alerts look like. Click it to come back to this tab.`])
 })
 
-test("a banner is Claude Notify's, and its click comes back to this session's tab", async ($, on) => {
+test("a banner is herald's, and its click comes back to this session's tab", async ($, on) => {
   const told = machine(on, { tty: '' })
   await $.session.start(start)
   await $.command.run({ command: 'notify', args: 'test' } as never)
-  expect(told.clicksTo).toEqual(['/dev/ttys004'])
+  expect(told.clicksTo).toEqual(['show /dev/ttys004'])
 })
 
 test('/notify haiku sends a banner with the haiku Claude Haiku wrote', async ($, on) => {
@@ -238,18 +242,18 @@ test('/notify haiku sends a banner with the haiku Claude Haiku wrote', async ($,
   expect(told).toEqual([`banner:${TITLE}|A soft chime rings out\nthe tab across the Spaces\ncalls you home again`])
 })
 
-test("in Ghostty a banner is Claude Notify's or none: a failed build says why, and Ghostty's own isn't sent", async ($, on) => {
-  const told = machine(on, { tty: '' }, {}, { hintedTest: true }, true, true, 'swiftc: command not found')
+test("in Ghostty a banner is herald's or none: a source herald couldn't make says why, and Ghostty's own isn't sent", async ($, on) => {
+  const told = machine(on, { tty: '' }, {}, { hintedTest: true }, true, true, 'herald: notifications are off for claude')
   await $.session.start(start)
-  expect((await $.command.run({ command: 'notify', args: 'test' } as never)).text).toContain("Claude Notify couldn't be built: swiftc: command not found")
+  expect((await $.command.run({ command: 'notify', args: 'test' } as never)).text).toContain("herald couldn't make its source: notifications are off for claude")
   expect(told).toEqual([])
 })
 
-test("/notify settings opens Claude Notify's notification settings", async ($, on) => {
+test("/notify settings opens the herald source's notification settings", async ($, on) => {
   const told = machine(on, { tty: '' })
   await $.session.start(start)
-  expect((await $.command.run({ command: 'notify', args: 'settings' } as never)).text).toContain('for Claude Notify')
-  expect(told).toEqual(['open:x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.whilestevego.claude-notify.1a2b3c4d'])
+  expect((await $.command.run({ command: 'notify', args: 'settings' } as never)).text).toContain('for Claude Code')
+  expect(told).toEqual(['settings:claude'])
 })
 
 test('the first start hints at /notify test, once across sessions', async ($, on) => {

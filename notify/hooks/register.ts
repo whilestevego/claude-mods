@@ -43,8 +43,10 @@ const WARNED = 'warnedLimits'
 /** Set once the /notify test hint has been shown: in $.store, so it shows once, not once per session. */
 const HINTED = 'hintedTest'
 
-/** System Settings' Notifications page: the banner app's own entry in Ghostty and Rex, the whole list elsewhere. */
+/** System Settings' Notifications page, for a terminal that herald can't come back to. */
 const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension'
+/** The herald source that posts the banners in Ghostty and Rex. */
+const SOURCE = 'claude'
 
 const HELP = [
   '/notify test      send a desktop notification now, to check they show up',
@@ -56,13 +58,9 @@ const HELP = [
 let cfg: Config
 /** Claude's own process: its session record says when a permission dialog is up. */
 let pid = ''
-/** Claude's terminal: a click on its banner comes back to this tab. */
-let tty = ''
 let home = ''
-/** Claude Notify.app, built at session start: banners in Ghostty and Rex go through it. Its build error when it couldn't be. */
-let notifier: Promise<{ app: string; id: string } | { error: string }> = Promise.resolve({ error: 'not built yet' })
-/** Where a click on a Claude Notify banner goes: the Ghostty tty, or rex|<rex>|<session>|<block>. Unset: Claude Code sends banners. */
-let target: string | undefined
+/** The herald source, made with the first banner that herald posts. Why it couldn't be made, if so. */
+let source: Promise<string | undefined> | undefined
 /** The session's folder name, heading its banners so you can tell sessions apart. */
 let folder = ''
 let lastRequest = ''
@@ -74,44 +72,57 @@ const tasks = new Map<string, string>()
 /** Calls the permission check put to you, until they run or are refused. */
 const asking = new Set<string>()
 
-// "<pid> <tty>" of Claude itself: the nearest ancestor named claude (the mods' own host process sits between it and
-// this shell, and changes when mods reload). No API names it.
+// The pid of Claude itself: the nearest ancestor named claude (the mods' own host process sits between it and this
+// shell, and changes when mods reload). No API names it.
 const FIND_CLAUDE = `p=$$
 while [ "$p" -gt 1 ]; do
-  c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$p $(ps -o tty= -p "$p")"; exit; }
+  c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$p"; exit; }
   p=$(ps -o ppid= -p "$p" | tr -d ' ')
 done`
 
 async function locate($: EngineInterface) {
   home = (await $.env.get('HOME')) ?? ''
-  const [found = '', term = ''] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(/\s+/)
-  pid = found
-  tty = term && !term.startsWith('?') ? `/dev/${term}` : ''
-  const program = ((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase()
-  const bin = await $.env.get('REX_BIN_DIR')
-  const rex = [bin ? `${bin}/rex` : '', (await $.env.get('REX_SESSION')) ?? '', (await $.env.get('REX_BLOCK')) ?? '']
-  target = program === 'ghostty' ? tty : program === 'rex' && rex.every(v => v && !v.includes('|')) ? ['rex', ...rex].join('|') : undefined
-}
-
-/** Builds Claude Notify.app when its source changed. */
-async function buildNotifier($: EngineInterface): Promise<{ app: string; id: string } | { error: string }> {
-  const root = $.plugin.root
-  const r = await $.process.run(['sh', `${root}/hooks/build-notifier.sh`, root])
-  if (r.exitCode !== 0) return { error: r.stderr.trim().slice(-120) || `exit ${r.exitCode}` }
-  return { app: `${root}/.build/Claude Notify.app`, id: r.stdout.trim().split('\n').pop() ?? '' }
+  pid = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim()
 }
 
 /**
- * Shows a banner; the reason it couldn't, if it couldn't. In Ghostty and Rex it comes from Claude Notify, with Claude's
- * icon: Ghostty's own banner click pulls a background tab's window over to your Space, Claude Notify's slides to the
- * window's Space instead. Elsewhere Claude Code's channel sends it, since Claude Notify's click only finds those two.
+ * The shell command that brings you back to this session's tab, from the terminal mod that knows the terminal. Empty
+ * when neither ghostty nor rex can: a mod that isn't loaded fails its call, and one in another terminal answers empty.
+ */
+async function showCommand($: EngineInterface): Promise<string> {
+  const answers = await Promise.allSettled([(async () => $.ghostty.showCommand())(), (async () => $.rex.showCommand())()])
+  return answers.map(a => (a.status === 'fulfilled' ? a.value : '')).find(Boolean) ?? ''
+}
+
+/** Runs herald, which `make install` puts in ~/.local/bin; that folder isn't always on the PATH. */
+async function herald($: EngineInterface, args: string[]) {
+  return $.process.run(['sh', '-c', 'PATH="$PATH:$HOME/.local/bin" exec herald "$@"', 'herald', ...args])
+}
+
+const failure = (r: { exitCode: number; stderr: string }) => r.stderr.trim().replace(/^herald: /, '').slice(0, 160) || `exit ${r.exitCode}`
+
+/** Makes the herald source, or keeps it. Its icon is icon.png, when there is one. */
+async function makeSource($: EngineInterface): Promise<string | undefined> {
+  const icon = `${$.plugin.root}/icon.png`
+  const hasIcon = (await $.process.run(['test', '-f', icon])).exitCode === 0
+  const r = await herald($, ['add', SOURCE, '--title', 'Claude Code', ...(hasIcon ? ['--icon', icon] : [])])
+  if (r.exitCode === 127) return 'herald is not installed (https://github.com/whilestevego/herald)'
+  return r.exitCode === 0 ? undefined : failure(r)
+}
+
+/**
+ * Shows a banner; the reason it couldn't, if it couldn't. In Ghostty and Rex herald posts it, and a click runs the
+ * terminal mod's command: Ghostty's own banner click pulls a background tab's window over to your Space, the ghostty
+ * mod's moves to the window's Space instead. Elsewhere Claude Code's channel sends it.
  */
 async function banner($: EngineInterface, text: string): Promise<string | undefined> {
-  if (target !== undefined) {
-    const built = await notifier
-    if ('error' in built) return `Claude Notify couldn't be built: ${built.error}`
-    const r = await $.process.run(['open', '-n', built.app, '--args', 'post', title(), text, target])
-    return r.exitCode === 0 ? undefined : r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`
+  const click = await showCommand($)
+  if (click) {
+    source ??= makeSource($).catch(e => String(e))
+    const failed = await source
+    if (failed) return `herald couldn't make its source: ${failed}`
+    const r = await herald($, ['post', SOURCE, '--title', title(), '--on', 'click', click, '--', text])
+    return r.exitCode === 0 ? undefined : failure(r)
   }
   const sent = await $.ui.notify(text, { title: title() })
   return sent.isSent ? undefined : sent.reason
@@ -212,10 +223,12 @@ async function haikuBanner($: EngineInterface): Promise<{ text: string }> {
 }
 
 async function openSettings($: EngineInterface): Promise<{ text: string }> {
-  const built = target !== undefined ? await notifier : undefined
-  const r = await $.process.run(['open', built && 'id' in built ? `${SETTINGS}?id=${built.id}` : SETTINGS])
-  if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
-  return { text: `Opened System Settings. Turn on Allow notifications${target !== undefined ? ' for Claude Notify' : ''}, then /notify test.` }
+  const click = await showCommand($)
+  if (click) source ??= makeSource($).catch(e => String(e))
+  const viaHerald = click !== '' && !(await source)
+  const r = viaHerald ? await herald($, ['settings', SOURCE]) : await $.process.run(['open', SETTINGS])
+  if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${failure(r)}` }
+  return { text: `Opened System Settings. Turn on Allow notifications${viaHerald ? ' for Claude Code' : ''}, then /notify test.` }
 }
 
 const title = () => (folder ? `Claude Code · ${folder}` : 'Claude Code')
@@ -253,7 +266,6 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
-    if (target !== undefined) notifier = buildNotifier($).catch(e => ({ error: String(e) }))
     await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test (or haiku) to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)

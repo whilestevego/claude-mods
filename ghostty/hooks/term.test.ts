@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { progress, Progress, runningBar, safe, tabTitle, titleAction } from './term'
+import { progress, Progress, runningBar, safe, showCommand, tabTitle, titleAction } from './term'
 
 test('sequences', () => {
   expect(titleAction('✳ Fix Login Bug')).toBe('set_surface_title:✳ Fix Login Bug')
@@ -23,4 +23,10 @@ test('tab title shows ❓ while waiting', () => {
 test('the running bar is busy, and red after a failure', () => {
   expect(runningBar(false)).toBe('\x1b]9;4;3\x07')
   expect(runningBar(true)).toBe('\x1b]9;4;2;100\x07')
+})
+
+test('showCommand runs the focus script with the tty', () => {
+  const command = showCommand('/dev/ttys004')
+  expect(command.startsWith("osascript -e 'on run argv")).toBe(true)
+  expect(command.endsWith("end run' '/dev/ttys004'")).toBe(true)
 })

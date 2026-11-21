@@ -68,25 +68,20 @@ Without it, nothing can tell whether you're looking, so it always tells you.
   the first three are `both`, and background tasks and check-ins are `voice`.
 - **Clicking a notification** in Ghostty brings you to the tab of the session that sent it,
   switching to its Space rather than pulling its window over. In Rex it brings you to the
-  session's pane. In both, the banners come from Claude Notify, a small app notify builds
-  from source the first time it starts. Each one is titled with the session's folder, so you
-  can tell sessions apart.
-- **Claude Notify's icon** is `notify/icon.png` when that file exists, else 🔔. To change it,
-  run `"notify/.build/Claude Notify.app/Contents/MacOS/claude-notify" set-icon <image>`, where
-  `<image>` is an image file or an app, such as `/Applications/Rex.app` (its icon at full
-  size). Leave out `<image>` to go back to 🔔. macOS caches a banner's icon by app ID, so each
-  icon gets its own ID. The build removes the old ID from macOS, and macOS asks once more to
-  allow banners and control of the terminal.
-- **An old Claude Notify ID** that is still in System Settings → Notifications:
-  `claude-notify forget <id>` (the same program) removes it from macOS. It only accepts
-  Claude Notify's own IDs.
+  session's pane. In both, [herald](https://github.com/whilestevego/herald) posts the
+  banners, from its source `claude` with the title Claude Code. notify makes the source with
+  its first banner. A click runs a command that the ghostty or rex mod builds. Each banner is titled with the session's folder, so you can tell sessions
+  apart.
+- **The banner's icon** is `notify/icon.png` when that file exists, else 🔔. To change it,
+  replace the file and start a new session. herald gives the new icon its own app ID and
+  removes the old one, and macOS asks once more to allow banners and control of the terminal.
 - Without say, `voice` alerts are skipped and the banners still go out.
 
 | Command | What it does |
 |---|---|
 | `/notify test` | Sends a desktop notification right away. macOS can't tell a mod whether your terminal may show notifications, so this is how to check. The first time notify starts, it reminds you once. |
 | `/notify haiku` | The same, with a fresh haiku from Claude Haiku as its text. |
-| `/notify settings` | Opens the switch in System Settings: Claude Notify's entry in Ghostty and Rex, the Notifications list elsewhere. |
+| `/notify settings` | Opens the switch in System Settings: the entry of herald's `claude` source in Ghostty and Rex, the Notifications list elsewhere. |
 
 ### say
 
@@ -220,8 +215,8 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
 - **say** needs [murmur](https://github.com/whilestevego/murmur) installed, which runs on
   Apple Silicon Macs.
 - **notify**'s desktop notifications need notifications allowed in System Settings →
-  Notifications: for Claude Notify in Ghostty and Rex, which needs the Xcode command line tools
-  (`swiftc`) to build, or for your terminal elsewhere. `/notify test` checks;
+  Notifications: for Claude Code (herald's `claude` source) in Ghostty and Rex, which needs
+  herald installed, or for your terminal elsewhere. `/notify test` checks;
   `/notify settings` opens the page.
 - **session-info**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 

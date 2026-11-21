@@ -47,6 +47,28 @@ export function windowOf(view: string, block: string): string | undefined {
   }
 }
 
+/** The Rex Mac apps attached to the session, from `rex session inspect --json`. */
+export function appClients(view: string): string[] {
+  try {
+    const v = JSON.parse(view) as { clients?: { client_id: string; info?: { kind?: string; platform?: string } }[] }
+    return (v.clients ?? []).filter(c => c.info?.kind === 'app' && c.info.platform === 'macos').map(c => c.client_id)
+  } catch {
+    return []
+  }
+}
+
+const quote = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`
+
+/**
+ * The command that shows `block`. `rex focus` moves only the server's focus, so each Mac app must also select the tab,
+ * with session.select (it needs Remote Control). A client ID is fixed at post time: after Rex restarts, only `activate` works.
+ */
+export function showCommand(bin: string, session: string, block: string, window: string | undefined, clients: string[]): string {
+  const rex = quote(bin)
+  const select = window ? clients.map(c => `${rex} -C ${quote(c)} do session.select ${quote(`session_id=${session}`)} ${quote(`window_id=${window}`)}`) : []
+  return [`${rex} focus -s ${quote(session)} ${quote(block)}`, ...select, `osascript -e 'tell application "Rex" to activate'`].join('; ')
+}
+
 async function isFocused($: EngineInterface): Promise<boolean> {
   const front = await $.process.run(['osascript', '-e', FRONT])
   if (front.exitCode !== 0 || !front.stdout.startsWith('true')) return false
@@ -92,10 +114,17 @@ async function restoreTitle($: EngineInterface) {
 export const register: Register = (on, options) => {
   cfg = config(options)
 
-  // $.rex.isFocused: notify asks whether you're looking at this session. False outside Rex.
-  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), rex: { isFocused: async () => false } }))
+  // $.rex.isFocused and $.rex.showCommand, for notify. False and empty outside Rex.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), rex: { isFocused: async () => false, showCommand: async () => '' } }))
 
   on('rex.isFocused', async $ => ({ value: rex.block !== '' && (await isFocused($).catch(() => false)) }))
+
+  on('rex.showCommand', async $ => {
+    if (!rex.block) return { value: '' }
+    const view = await $.process.run([rex.bin, 'session', 'inspect', rex.session, '--json'])
+    const json = view.exitCode === 0 ? view.stdout : ''
+    return { value: showCommand(rex.bin, rex.session, rex.block, windowOf(json, rex.block), appClients(json)) }
+  })
 
   on('session.start', async ($, e, next) => {
     const bin = await $.env.get('REX_BIN_DIR')
