@@ -71,11 +71,14 @@ Without it, nothing can tell whether you're looking, so it always tells you.
   session's pane. In both, the banners come from Claude Notify, a small app notify builds
   from source the first time it starts. Each one is titled with the session's folder, so you
   can tell sessions apart.
-- **Claude Notify's icon** is `notify/icon.png` when that file exists, else 🔔. Changing the
-  file rebuilds the app at the next session start.
-- **An old Claude Notify ID** (after its app ID changed) stays in System Settings →
-  Notifications. `sh notify/hooks/forget-notifier.sh <id>` removes it from macOS. It only
-  accepts Claude Notify's own IDs.
+- **Claude Notify's icon** is `notify/icon.png` when that file exists, else 🔔. To change it,
+  run `sh notify/hooks/set-notifier-icon.sh notify <image>`, where `<image>` is a `.png`, an
+  `.icns` or an app, such as `/Applications/Rex.app`. Leave out `<image>` to go back to 🔔.
+  macOS caches a banner's icon by app ID, so each icon gets its own ID. The build removes the
+  old ID from macOS, and macOS asks once more to allow banners and control of the terminal.
+- **An old Claude Notify ID** that is still in System Settings → Notifications:
+  `sh notify/hooks/forget-notifier.sh <id>` removes it from macOS. It only accepts Claude
+  Notify's own IDs.
 - Without say, `voice` alerts are skipped and the banners still go out.
 
 | Command | What it does |

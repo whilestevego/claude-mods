@@ -29,7 +29,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
-    if (argv[0] === 'sh' && argv[1]?.endsWith('build-notifier.sh')) return { value: { exitCode: buildError ? 1 : 0, stdout: '', stderr: buildError } } as never
+    if (argv[0] === 'sh' && argv[1]?.endsWith('build-notifier.sh')) return { value: { exitCode: buildError ? 1 : 0, stdout: buildError ? '' : 'com.whilestevego.claude-notify.1a2b3c4d\n', stderr: buildError } } as never
     if (argv[0] === 'sh') return out('4242 ttys004\n')
     // Claude Notify: open -n <app> --args post <title> <text> <tty>
     if (argv[0] === 'open' && argv[4] === 'post') (told.push(`banner:${argv[5]}|${argv[6]}`), clicksTo.push(argv[7]!))
@@ -249,7 +249,7 @@ test("/notify settings opens Claude Notify's notification settings", async ($, o
   const told = machine(on, { tty: '' })
   await $.session.start(start)
   expect((await $.command.run({ command: 'notify', args: 'settings' } as never)).text).toContain('for Claude Notify')
-  expect(told).toEqual(['open:x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.whilestevego.claude-notify'])
+  expect(told).toEqual(['open:x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.whilestevego.claude-notify.1a2b3c4d'])
 })
 
 test('the first start hints at /notify test, once across sessions', async ($, on) => {

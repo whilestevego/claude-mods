@@ -45,7 +45,6 @@ const HINTED = 'hintedTest'
 
 /** System Settings' Notifications page: the banner app's own entry in Ghostty and Rex, the whole list elsewhere. */
 const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension'
-const NOTIFIER_ID = 'com.whilestevego.claude-notify'
 
 const HELP = [
   '/notify test      send a desktop notification now, to check they show up',
@@ -61,7 +60,7 @@ let pid = ''
 let tty = ''
 let home = ''
 /** Claude Notify.app, built at session start: banners in Ghostty and Rex go through it. Its build error when it couldn't be. */
-let notifier: Promise<{ app: string } | { error: string }> = Promise.resolve({ error: 'not built yet' })
+let notifier: Promise<{ app: string; id: string } | { error: string }> = Promise.resolve({ error: 'not built yet' })
 /** Where a click on a Claude Notify banner goes: the Ghostty tty, or rex|<rex>|<session>|<block>. Unset: Claude Code sends banners. */
 let target: string | undefined
 /** The session's folder name, heading its banners so you can tell sessions apart. */
@@ -95,10 +94,11 @@ async function locate($: EngineInterface) {
 }
 
 /** Builds Claude Notify.app when its source changed. */
-async function buildNotifier($: EngineInterface): Promise<{ app: string } | { error: string }> {
+async function buildNotifier($: EngineInterface): Promise<{ app: string; id: string } | { error: string }> {
   const root = $.plugin.root
   const r = await $.process.run(['sh', `${root}/hooks/build-notifier.sh`, root])
-  return r.exitCode === 0 ? { app: `${root}/.build/Claude Notify.app` } : { error: r.stderr.trim().slice(-120) || `exit ${r.exitCode}` }
+  if (r.exitCode !== 0) return { error: r.stderr.trim().slice(-120) || `exit ${r.exitCode}` }
+  return { app: `${root}/.build/Claude Notify.app`, id: r.stdout.trim().split('\n').pop() ?? '' }
 }
 
 /**
@@ -212,7 +212,8 @@ async function haikuBanner($: EngineInterface): Promise<{ text: string }> {
 }
 
 async function openSettings($: EngineInterface): Promise<{ text: string }> {
-  const r = await $.process.run(['open', target !== undefined ? `${SETTINGS}?id=${NOTIFIER_ID}` : SETTINGS])
+  const built = target !== undefined ? await notifier : undefined
+  const r = await $.process.run(['open', built && 'id' in built ? `${SETTINGS}?id=${built.id}` : SETTINGS])
   if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${r.stderr.trim().slice(0, 120) || `exit ${r.exitCode}`}` }
   return { text: `Opened System Settings. Turn on Allow notifications${target !== undefined ? ' for Claude Notify' : ''}, then /notify test.` }
 }
