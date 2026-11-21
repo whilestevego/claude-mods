@@ -73,6 +73,9 @@ Without it, nothing can tell whether you're looking, so it always tells you.
   can tell sessions apart.
 - **Claude Notify's icon** is `notify/icon.png` when that file exists, else 🔔. Changing the
   file rebuilds the app at the next session start.
+- **An old Claude Notify ID** (after its app ID changed) stays in System Settings →
+  Notifications. `sh notify/hooks/forget-notifier.sh <id>` removes it from macOS. It only
+  accepts Claude Notify's own IDs.
 - Without say, `voice` alerts are skipped and the banners still go out.
 
 | Command | What it does |
@@ -147,10 +150,17 @@ up where it left off.
 ### rex
 
 Ties Claude into the [Rex](https://www.superlogical.com/rex) terminal. Claude Code already
-reports its status to Rex (tab dots, Dock badge, sounds), so this mod only tells notify
-whether you're looking at the session: Rex is in front, on this session, with this pane
-focused. With several Rex windows open, Rex only names the session of the window you used
-last, so the answer can be wrong. In other terminals the rex mod does nothing.
+reports its status to Rex (tab dots, Dock badge, sounds). All its settings start with "Rex" in
+`/config`.
+
+- **Tab title:** a 4-word summary of what the session is about, as the tab's name, updated
+  every few minutes as it goes. `/title` gets a new one right away. A resumed session gets
+  its old title back, also when it was titled in Ghostty.
+- **Focus for notify:** tells notify whether you're looking at the session: Rex is in front,
+  on this session, with this pane focused. With several Rex windows open, Rex only names the
+  session of the window you used last, so the answer can be wrong.
+
+In other terminals the rex mod does nothing.
 
 Turn off Rex's own system notifications for program activity, so notify sends the only banner.
 
@@ -208,7 +218,9 @@ claude plugin test context-bar       # run its tests
 ```
 
 Mods can call each other through nouns on `$`: say adds `$.voice.say({ text })`, which
-notify speaks through, and ghostty and rex add `$.terminal.isFocused()`, which notify asks
-before alerting. Each answers only in its own terminal and passes the question on elsewhere. Their types are in each mod's `types/index.d.ts`.
+notify speaks through, and ghostty and rex add `$.ghostty.isFocused()` and `$.rex.isFocused()`,
+which notify asks before alerting. Each answers false outside its own terminal. Two mods can't
+add the same noun, and a hook on a noun no loaded mod adds stops its mod from loading, so each
+terminal mod has its own. Their types are in each mod's `types/index.d.ts`.
 
 [IDEAS.md](IDEAS.md) has ideas for more mods.

@@ -25,6 +25,9 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - Tab progress bar: busy while Claude works, red after a failed tool call.
   - ❓ in the tab and a notification when Claude waits on you (say speaks it instead when on).
   - `/workspace save`, `close`, `list`, `open`: put a window of sessions away and bring it back, every conversation resumed with its tab title.
+- ✅ **rex**: Rex integration. Claude Code reports its own status to Rex.
+  - Tab title: a 4-word summary as the tab's name; `/title` for a new one now; restored on resume.
+  - Tells notify when you're looking at the session.
 
 Related, outside this repo: **[murmur](https://github.com/whilestevego/murmur)**, the text-to-speech tool say uses (Kokoro on the Apple Neural Engine, 28 voices, pronunciation fixes).
 
@@ -80,3 +83,67 @@ Related, outside this repo: **[murmur](https://github.com/whilestevego/murmur)**
 - **🎤 Presentation mode**: `/present` bumps the font and hides the bars for screen sharing and pairing; again to undo.
 - **🌗 Theme sync**: the mods' colors follow your Ghostty theme, light or dark.
 
+## Rex
+
+Most of these react to Rex events. `rex.on` handlers only run in a script that `rex do` keeps running, so the rex mod
+would start one watcher, `rex do claude.lua --all`, when none runs yet. Each idea that reacts to an event is a handler
+in that file. Effort: **S** about an hour, **M** a day, **L** more.
+
+### Ambient awareness
+
+- **🎨 Mood lighting** (S): the watcher tints Claude's pane with `set_theme` when its status changes: amber while it
+  waits on you, red after an error, a short green flash when it finishes.
+- **🌡️ Context warmth** (S): the pane's background turns warmer as the context window fills, so you see the need for
+  `/compact` before you read a number.
+- **🖍️ Project hues** (S): a hue from a hash of the repo name, set as each Claude pane's theme, so two repos never look
+  the same.
+- **📟 Pane header readout** (S): "waiting 3m · $1.20 · 64% ctx" as the block label (`set_block_label`), updated on
+  each event. Rex's tab title stays as it is.
+
+### Answer Claude without going to it
+
+- **🪄 Summon the waiting pane** (M): one key moves a blocked Claude pane from a background tab into a floating layer
+  over your current tab (`detach_block`, `new_layer`, `float_block`). After you answer, it goes back to its home split.
+- **✅ Approve from any pane** (M): a `claude/` key mode where `y` and `n` type the answer into the blocked pane
+  (`write`). A floating preview of its screen (`format`) shows the question first.
+- **🛑 Panic button** (S): one key sends Esc to every Claude pane whose status is "working", in every session.
+- **🎛️ Palette actions** (S): `rex.action` entries in Rex's command palette, such as "Claude: approve waiting tool",
+  "Claude: send /compact to all idle sessions" and "Claude: resume last conversation here".
+
+### Give Claude eyes on other panes
+
+- **👀 `/pane`** (M): pick a pane in Claude; its screen and scrollback (`format`) go into the prompt as text.
+- **🎯 Send selection to Claude** (S): select text in any pane with copy mode, press a key, and it goes into Claude's
+  prompt as a quote (`write` with bracketed paste). Works from logs, vim and remote hosts.
+- **🚑 Crash watch** (M): `terminal.child_exited` with a non-zero code in a pane without Claude (a dev server) shows
+  "Server crashed. Ask Claude?" through Claude Notify. A click types the pane's last 50 lines into an idle Claude.
+- **🔌 Port awareness** (S): the terminal's `ports` method and `ports_changed` event tell Claude which port the dev
+  server listens on, and when it goes down.
+
+### Claude arranges your workspace
+
+- **📺 Live panes** (M): a background Bash command (dev server, test watcher) also opens a split below Claude that
+  follows its output file (`rex split --focus=false`). It closes when the task ends.
+- **🌳 Worktree sessions** (M): a new git worktree gets a Rex session named after it, with Claude, a shell and a dev
+  server (`session.create` with a layout). Removing the worktree closes the session.
+- **🧱 Layouts Claude writes once** (S): "set me up for the API work" makes Claude write the layout as a `rex.action`
+  in the Rex config and run it. Next time it is a palette entry or a key.
+- **♻️ Reboot resume** (M): if Rex brings back sessions but not their programs, the watcher types
+  `claude --resume <id>` into each pane that ran Claude (`initial_input`). Depends on the reboot check.
+
+### Away from the desk
+
+- **🚚 `/handoff <host>`** (L): push the branch, then open a tab on another Rex server (`rex.server(label)`) that runs
+  `claude --resume` there. The job moves to the fast machine and stays in the same Rex window.
+- **📱 Notifications that follow you** (M): when the Mac is idle and a phone client is connected, notify lets Rex send
+  its own notifications so they reach the phone, and goes back to Claude Notify when you return. Not yet confirmed
+  that a Rex phone client exists.
+- **📸 Whiteboard to prompt** (S): bind Rex's Insert Photo (`pane.insert_photo`) in Claude's pane, so a photo of a
+  sketch lands in the prompt as a path.
+
+### History
+
+- **🎞️ Session replay** (M): at each status change the watcher saves Claude's pane as HTML (`format`) with the time and
+  status. A local page with a slider replays a long run frame by frame.
+
+First picks: summon the waiting pane, `/pane`, and mood lighting. All three need the watcher first.
