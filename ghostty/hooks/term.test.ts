@@ -1,8 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import {
-  claudeSessions, matchSessions, progress, Progress, runningBar, safe, shortFolder, tabTitle, titleAction,
-} from './term'
+import { progress, Progress, runningBar, safe, tabTitle, titleAction } from './term'
 
 test('sequences', () => {
   expect(titleAction('✳ Fix Login Bug')).toBe('set_surface_title:✳ Fix Login Bug')
@@ -25,15 +23,4 @@ test('tab title shows ❓ while waiting', () => {
 test('the running bar is busy, and red after a failure', () => {
   expect(runningBar(false)).toBe('\x1b]9;4;3\x07')
   expect(runningBar(true)).toBe('\x1b]9;4;2;100\x07')
-})
-
-test('Claude sessions from Ghostty terminals and ps', () => {
-  const terms = 'A\t/dev/ttys000\t✳ Plan review\t/u/redouble\nB\t/dev/ttys001\t~/hobby\t/u/hobby\nC\t/dev/ttys004\t✳ Murmur Mods\t/u/.claude\n'
-  const s = claudeSessions(terms, new Set(['/dev/ttys000', '/dev/ttys004']), '/dev/ttys004')
-  expect(s.map(x => [x.id, x.isMe])).toEqual([['A', false], ['C', true]])
-  expect(matchSessions(s, '1').map(x => x.id)).toEqual(['A'])
-  expect(matchSessions(s, 'murmur').map(x => x.id)).toEqual(['C'])
-  expect(matchSessions(s, 'redouble').map(x => x.id)).toEqual(['A'])
-  expect(matchSessions(s, '9')).toEqual([])
-  expect(shortFolder('/Users/me/work', '/Users/me')).toBe('~/work')
 })

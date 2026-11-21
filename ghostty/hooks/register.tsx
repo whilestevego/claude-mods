@@ -3,14 +3,9 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { WorkspaceRow } from '../types'
 
-import {
-  claudeSessions, matchSessions, progress, Progress, runningBar, shortFolder, tabTitle, titleAction,
-} from './term'
-import type { Session } from './term'
-import { DEFAULTS, parseAdd, parseBindings, prettyKeys, renderFile, upsert, withInclude } from './keybinds'
-import type { Binding } from './keybinds'
-import { asksPermission, badge, nextWaiting, parseEntry, rank } from './registry'
-import type { Entry, Ranked, Status } from './registry'
+import { progress, Progress, runningBar, tabTitle, titleAction } from './term'
+import { asksPermission, parseEntry } from './registry'
+import type { Entry, Status } from './registry'
 import { ask, bare, clean, context } from './title'
 import {
   claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, parseWorkspace, sameWorkspace, slug,
@@ -23,7 +18,6 @@ type Config = {
   titleMinutes: number
   tabProgress: boolean
   waitingBadge: boolean
-  keybinds: boolean
 }
 
 function config(o: PluginOptions): Config {
@@ -32,7 +26,6 @@ function config(o: PluginOptions): Config {
     titleMinutes: typeof o.titleMinutes === 'number' && o.titleMinutes > 0 ? o.titleMinutes : 3,
     tabProgress: o.tabProgress !== false,
     waitingBadge: o.waitingBadge !== false,
-    keybinds: o.keybinds === true,
   }
 }
 
@@ -51,15 +44,11 @@ const asking = new Set<string>()
 /** The calls waiting on you right now (a dialog that's up, a question): ❓ until the last of them is answered. */
 const waitingOn = new Set<string>()
 let home = ''
-/** The sessions the /goto picker shows. */
-let picks: Ranked[] = []
 let status: Status = 'idle'
 let statusSince = 0
 
 const workspaceRows = atom({ plugin: 'ghostty', key: 'workspaces' } as const, [])
 const WORKSPACES = 'claude-workspaces'
-
-const GOTO = 'claude-goto'
 
 // "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
 // this shell, owns the tty too). Without one, the nearest ancestor owning a tty. No API names Claude's tty or pid.
@@ -74,49 +63,11 @@ while [ "$p" -gt 1 ]; do
 done
 echo "$first"`
 
+/** Finds Claude's tty, in Ghostty only. Elsewhere tty stays empty, and with it everything this mod does. */
 async function locate($: EngineInterface) {
   home = (await $.env.get('HOME')) ?? ''
+  if (((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() !== 'ghostty') return
   ;[tty = '', pid = ''] = (await $.process.run(['sh', '-c', FIND_TTY])).stdout.trim().split(' ')
-}
-
-// Every Ghostty terminal as "id<TAB>tty<TAB>title<TAB>folder"; plus the ttys running Claude.
-const LIST_TERMINALS = `tell application "Ghostty"
-  set out to ""
-  repeat with t in terminals
-    set out to out & (id of t) & (character id 9) & (tty of t) & (character id 9) & (name of t) & (character id 9) & (working directory of t) & linefeed
-  end repeat
-  return out
-end tell`
-// A string pattern with [/]: no backslash for the template literal to eat.
-const CLAUDE_TTYS = `ps -ax -o tty=,comm= | awk 'match($2, "(^|[/])claude$") { print "/dev/" $1 }'`
-// A native tab is a window of its own, and only a window's selected tab sits on a Space: focusing a background tab of
-// a window on another Space pulls the whole window over to this one. Focusing the selected tab first slides to the
-// window's Space instead; the background tab is then selected in place.
-const FOCUS = `on run argv
-  set target to item 1 of argv
-  tell application "Ghostty"
-    repeat with w in windows
-      repeat with t in tabs of w
-        if not (selected of t) and (id of terminals of t) contains target then
-          focus (focused terminal of selected tab of w)
-          delay 0.5
-        end if
-      end repeat
-    end repeat
-    focus (first terminal whose id is target)
-  end tell
-end run`
-
-async function listSessions($: EngineInterface): Promise<Session[]> {
-  const [terms, ttys] = await Promise.all([
-    $.process.run(['osascript', '-e', LIST_TERMINALS]),
-    $.process.run(['sh', '-c', CLAUDE_TTYS]),
-  ])
-  // A failing command must say so: an empty list would read as "no other sessions".
-  for (const [what, r] of [['Ghostty', terms], ['ps', ttys]] as const) {
-    if (r.exitCode !== 0) throw new Error(`${what} query failed: ${r.stderr.trim().slice(0, 160) || `exit ${r.exitCode}`}`)
-  }
-  return claudeSessions(terms.stdout, new Set(ttys.stdout.split('\n').filter(Boolean)), tty)
 }
 
 // The tty of the terminal Ghostty has focused, or nothing when Ghostty isn't the frontmost app.
@@ -130,10 +81,6 @@ async function isFocused($: EngineInterface): Promise<boolean> {
   if (!tty) return false
   const r = await $.process.run(['osascript', '-e', FOCUSED_TTY])
   return r.exitCode === 0 && r.stdout.trim() === tty
-}
-
-async function goTo($: EngineInterface, s: Session) {
-  await $.process.run(['osascript', '-e', FOCUS, s.id])
 }
 
 // A mod can't print to the screen, so escape sequences go straight to Claude's tty. Bytes written there can land
@@ -229,7 +176,7 @@ async function restoreTitle($: EngineInterface) {
   await drawTitle($)
 }
 
-// ─── Session status (for /goto and /workspace) ─────────────────────────────
+// ─── Session status (for /workspace) ─────────────────────────────────────
 
 const statusDir = () => `${home}/Library/Caches/claude-ghostty/sessions`
 
@@ -249,11 +196,6 @@ async function readEntries($: EngineInterface): Promise<Map<string, Entry>> {
     files.filter(f => f.name.endsWith('.json')).map(f => $.fs.read(`${statusDir()}/${f.name}`).then(parseEntry, () => undefined)),
   )
   return new Map(entries.filter(e => e !== undefined).map(e => [e.tty, e]))
-}
-
-async function rankedSessions($: EngineInterface): Promise<Ranked[]> {
-  const [sessions, entries] = await Promise.all([listSessions($), readEntries($)])
-  return rank(sessions, entries)
 }
 
 // ─── Workspaces ──────────────────────────────────────────────────────────────
@@ -417,52 +359,14 @@ async function deleteWorkspace($: EngineInterface, file: string) {
   await update($, workspaceRows, rows => rows.filter(r => r.file !== file))
 }
 
-// ─── Keybinds ────────────────────────────────────────────────────────────────
-
-// Where Ghostty reads its config: ~/.config/ghostty when that's in use, else the macOS app folder.
-async function configDir($: EngineInterface): Promise<string> {
-  const xdg = `${home}/.config/ghostty`
-  const app = `${home}/Library/Application Support/com.mitchellh.ghostty`
-  const r = await $.process.run(['sh', '-c', '[ -f "$1/config" ] && echo "$1" || echo "$2"', 'sh', xdg, app])
-  return r.stdout.trim() || app
-}
-
-async function readBindings($: EngineInterface): Promise<{ dir: string; file: string; text: string | null }> {
-  const dir = await configDir($)
-  const file = `${dir}/claude-keybinds`
-  const text = await $.fs.read(file).catch(() => null)
-  return { dir, file, text }
-}
-
-/** Writes the bindings, makes the main config load them, and lets Ghostty check and reload. Undoes a rejected change. */
-async function saveBindings($: EngineInterface, bindings: readonly Binding[]): Promise<string | undefined> {
-  const { dir, file, text } = await readBindings($)
-  const previous = text ?? ''
-  await $.process.run(['mkdir', '-p', dir])
-  await $.fs.write(file, renderFile(previous, bindings))
-  const main = `${dir}/config`
-  const config = await $.fs.read(main).catch(() => '')
-  if (withInclude(config) !== config) await $.fs.write(main, withInclude(config))
-  const check = await $.process.run(['sh', '-c', '"$GHOSTTY_BIN_DIR/ghostty" +validate-config 2>&1'])
-  if (check.exitCode !== 0) {
-    await $.fs.write(file, previous)
-    return check.stdout.trim().split('\n')[0] || 'Ghostty rejected the change'
-  }
-  await $.process.run(['osascript', '-e', 'tell application "Ghostty" to perform action "reload_config" on (first terminal)'])
-  return undefined
-}
-
-function listing(bindings: readonly Binding[]): string {
-  if (bindings.length === 0) return 'No Claude keybinds yet. /keybind add <keys> <text>, e.g. /keybind add super+ctrl+h /say hush'
-  return bindings.map(b => `${prettyKeys(b.keys).padEnd(6)} ${b.text}`).join('\n')
-}
 
 export const register: Register = (on, options) => {
-  // $.ghostty.isFocused: other mods (notify) ask whether you're looking at this session. The noun's own method holds
-  // no `$`, so it only answers when nothing else does; the hook below, which has one, does the asking.
-  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), ghostty: { isFocused: async () => false } }))
+  // $.terminal.isFocused: other mods (notify) ask whether you're looking at this session. The noun's own method holds
+  // no `$`, so it only answers when nothing else does; the hook below, which has one, does the asking. Outside Ghostty
+  // it passes the question on (the rex mod answers in Rex).
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), terminal: { isFocused: async () => false } }))
 
-  on('ghostty.isFocused', async $ => ({ value: await isFocused($) }))
+  on('terminal.isFocused', async ($, e, next) => (tty ? { value: await isFocused($) } : next(e)))
 
   cfg = config(options)
   // Hooks that gate a prompt or a tool call pass it on untouched if they fail: the tab must never block work.
@@ -470,12 +374,9 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await locate($)
     void setStatus($, 'idle').catch(() => {})
+    if (!tty) return next(e)
     if (cfg.tabTitle) void restoreTitle($).catch(() => {})
     await $.command.register({ name: 'title', description: 'A new 4-word tab title for this session, now' })
-    await $.command.register({ name: 'keybind', description: 'Ghostty keys that type into Claude: /keybind, /keybind add <keys> <text>, /keybind remove <keys>' })
-    // First start: install the default keys once (a later /keybind remove sticks, since the file then exists).
-    if (cfg.keybinds && (await readBindings($).catch(() => null))?.text === null) void saveBindings($, DEFAULTS).catch(() => {})
-    await $.command.register({ name: 'goto', description: 'Jump to another Claude session in Ghostty (waiting ones first): /goto, /goto next, or /goto <number or words>' })
     await $.command.register({ name: 'workspace', description: 'Save this Ghostty window of sessions, or reopen one: /workspace save [name], /workspace close [name] (save, then exit the other sessions), /workspace list, /workspace open <name>' })
     return next(e)
   })
@@ -498,32 +399,6 @@ export const register: Register = (on, options) => {
     return { text: words ? `Tab title: ${words}` : 'Nothing to summarize yet: send a message first.' }
   })
 
-  on('command.run', { command: 'goto' }, async ($, e) => {
-    const ranked = await rankedSessions($).catch((err: Error) => err)
-    if (ranked instanceof Error) return { text: `/goto couldn't list sessions: ${ranked.message}` }
-    const others = ranked.filter(s => !s.isMe)
-    if (others.length === 0) return { text: 'No other Claude sessions are running in Ghostty.' }
-    const query = e.args.trim()
-    if (query === 'next') {
-      const waiting = nextWaiting(ranked)
-      if (!waiting) return { text: 'No session is waiting on you.' }
-      await goTo($, waiting)
-      return { text: `→ ${waiting.title} (${badge(waiting, Date.now())})` }
-    }
-    if (query) {
-      const hits = matchSessions(ranked, query).filter(s => !s.isMe)
-      if (hits.length === 1) {
-        await goTo($, hits[0]!)
-        return { text: `→ ${hits[0]!.title}` }
-      }
-      if (hits.length === 0) return { text: `No Claude session matches "${query}". /goto lists them.` }
-    }
-    picks = ranked
-    await $.ui.open({ id: GOTO, title: 'Claude sessions', focus: true, closeOnEscape: true, rows: ranked.length + 1 })
-    const waiting = others.filter(s => s.status === 'waiting').length
-    return { text: `${others.length} other Claude session${others.length === 1 ? '' : 's'}${waiting ? `, ${waiting} waiting on you` : ''}: pick one above.` }
-  })
-
   on('command.run', { command: 'workspace' }, async ($, e) => {
     const [verb = 'list', ...rest] = e.args.trim().split(/\s+/).filter(Boolean)
     const arg = rest.join(' ')
@@ -539,57 +414,6 @@ export const register: Register = (on, options) => {
     await update($, workspaceRows, () => rows)
     await $.ui.open({ id: WORKSPACES, title: 'Workspaces', focus: true, closeOnEscape: true, rows: rows.length + 1 })
     return { text: `${rows.length} saved workspace${rows.length === 1 ? '' : 's'}: pick one above.` }
-  })
-
-  on('command.run', { command: 'keybind' }, async ($, e) => {
-    const [verb, ...rest] = e.args.trim().split(/\s+/)
-    const current = parseBindings((await readBindings($)).text ?? '')
-    if (!verb || verb === 'list') return { text: listing(current) }
-    if (verb === 'add') {
-      const b = parseAdd(rest.join(' '))
-      if (typeof b === 'string') return { text: b }
-      const error = await saveBindings($, upsert(current, b))
-      return { text: error ? `Ghostty didn't accept that: ${error}` : `${prettyKeys(b.keys)} now types ${b.text} ⏎` }
-    }
-    if (verb === 'remove') {
-      const keys = (rest[0] ?? '').toLowerCase()
-      if (!current.some(b => b.keys === keys)) return { text: `No Claude keybind on ${keys || '(no keys given)'}.\n${listing(current)}` }
-      const error = await saveBindings($, current.filter(b => b.keys !== keys))
-      return { text: error ? `Ghostty didn't accept that: ${error}` : `Removed ${prettyKeys(keys)}.` }
-    }
-    return { text: 'Usage: /keybind, /keybind add <keys> <text>, /keybind remove <keys>' }
-  })
-
-  on('ui.render', { component: 'Pane', requestId: GOTO }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const now = Date.now()
-    const label = (s: Ranked) => `${badge(s, now).padEnd(6)} ${s.title} · ${shortFolder(s.folder, home)}`
-    const first = picks.findIndex(p => !p.isMe)
-    return (
-      <Box flexDirection="column">
-        {picks.map((s, i) =>
-          s.isMe ? (
-            <Text dimColor>
-              {'   '}
-              {label(s)} (this session)
-            </Text>
-          ) : (
-            <Button
-              key={`goto-${i}`}
-              plain
-              hotkey={i < 9 ? String(i + 1) : undefined}
-              label={label(s)}
-              autoFocus={first === i ? true : undefined}
-              onPress={async () => {
-                await $.ui.close({ id: GOTO })
-                await goTo($, s)
-              }}
-            />
-          ),
-        )}
-        <Text dimColor>❓ waiting on you · ⏳ working · number or Enter to jump · Esc to close</Text>
-      </Box>
-    )
   })
 
   on('ui.render', { component: 'Pane', requestId: WORKSPACES }, async ($, e) => {
@@ -663,7 +487,7 @@ export const register: Register = (on, options) => {
     waitingOn.clear()
     void Promise.all([drawTitle($), drawBar($), setStatus($, 'idle').catch(() => {})])
     const now = Date.now()
-    if (cfg.tabTitle && now - titledAt >= cfg.titleMinutes * 60_000) {
+    if (tty && cfg.tabTitle && now - titledAt >= cfg.titleMinutes * 60_000) {
       titledAt = now
       void retitle($, e.answer).catch(() => {})
     }

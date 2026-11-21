@@ -1,7 +1,7 @@
 {
   "name": "ghostty",
   "version": "0.4.0",
-  "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ when Claude waits on you (the notify mod sends the notification), /goto between Claude sessions (waiting ones first), /workspace to save and reopen windows of sessions, and /keybind for Ghostty keys that type into Claude",
+  "description": "Ghostty integration: a 4-word summary as the tab title (/title for a new one now), a tab progress bar, ❓ when Claude waits on you (the notify mod sends the notification), and /workspace to save and reopen windows of sessions",
   "author": {
     "name": "Steve Godin",
     "url": "https://github.com/whilestevego"
@@ -30,12 +30,6 @@
       "title": "Ghostty: ❓ when Claude waits on you",
       "description": "Put ❓ in the tab title while Claude waits for a permission or an answer",
       "default": true
-    },
-    "keybinds": {
-      "type": "boolean",
-      "title": "Ghostty: install Claude keybinds",
-      "description": "On, the next start adds ⌘⌃G for /goto to Ghostty (in its own claude-keybinds file, loaded by one line this adds to your Ghostty config). Off, Ghostty's config is only touched when you run /keybind add",
-      "default": false
     }
   },
   "types": "./types/index.d.ts"
