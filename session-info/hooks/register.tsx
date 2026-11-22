@@ -17,9 +17,12 @@ const ttyOf = ($: EngineInterface) => (tty ??= $.process.run(['sh', '-c', FIND_T
 
 // A mod can't ask for the session's name (what /list-agents shows and SendMessage addresses), so it's read from
 // the registry Claude Code keeps per running session: ~/.claude/sessions/<pid>.json. Newest wins if a pid file is stale.
+// The second line is the ref /list-agents puts after the name: the start of sha256("session:" + messagingSocketPath).
 const NAME_OF = `f=$(grep -lF "\\"sessionId\\":\\"$1\\"" "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/sessions/*.json 2>/dev/null)
 [ -n "$f" ] || exit 0
-cat "$(ls -t $f | head -1)"`
+f=$(ls -t $f | head -1)
+cat "$f"; echo
+s=$(plutil -extract messagingSocketPath raw -o - "$f" 2>/dev/null) && printf 'session:%s' "$s" | shasum -a 256 | cut -c1-6`
 
 // ponytail: re-read at most every 10s since the footer redraws often; a rename shows up within that.
 let named = { id: '', at: 0, text: Promise.resolve('') }
@@ -27,7 +30,11 @@ const nameOf = async ($: EngineInterface, id: string) => {
   const now = await $.clock.now()
   if (named.id !== id || now - named.at > 10_000) {
     const text = $.process.run(['sh', '-c', NAME_OF, 'sh', id])
-      .then(r => String(JSON.parse(r.stdout || '{}').name ?? ''))
+      .then(r => {
+        const [json, ref] = r.stdout.trim().split(/\n+/)
+        const name = String(JSON.parse(json || '{}').name ?? '')
+        return name && ref ? `${name} [${ref}]` : name
+      })
       .catch(() => '')
     named = { id, at: now, text }
   }
@@ -60,6 +67,7 @@ export const register: Register = on => {
     const id = await $.session.id()
     const name = await nameOf($, id)
     const worktree = await worktreeOf($)
+    const model = (await $.session.model()).replace(/^claude-/, '')
     const whichCopied = await read($, copied)
     // Pass the footer on with no mode labels, since this hook draws them itself. Other mods can then add their
     // own items after these.
@@ -73,6 +81,7 @@ export const register: Register = on => {
         <Client key="session-id" module="./sid.tsx" props={{ emoji: '🏷️', text: id.slice(0, 8), copied: whichCopied === 'id' }} />
         {worktree && <Text> </Text>}
         {worktree && <Client key="worktree" module="./sid.tsx" props={{ emoji: '🌳', text: worktree, copied: whichCopied === 'worktree' }} />}
+        {model && <Text> 🧠 {model}</Text>}
         {rest}
       </Box>
     )

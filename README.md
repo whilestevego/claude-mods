@@ -30,8 +30,11 @@ loud, at a threshold you set.)
 
 ### session-info
 
-Shows the session's name, its ID and the name of its git worktree in the bottom-right corner
-of the screen. Outside a git repository the worktree is left out.
+Shows the session's name, its ID, the name of its git worktree and the model in the
+bottom-right corner of the screen. Outside a git repository the worktree is left out.
+
+The name has the same ref as in `/list-agents`, for example `mods-42 [c38dc6]`. Two sessions
+can have the same name, but the ref is different for each. Use the full name with SendMessage.
 
 - Click any of them to copy it.
 - Ctrl-click one to copy the full `claude --resume <id>` command.

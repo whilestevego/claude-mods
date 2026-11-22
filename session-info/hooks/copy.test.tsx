@@ -19,12 +19,14 @@ test('click copies the id, shows Copied, then reverts', async ($, on) => {
   })
   on('ui.render', { component: 'SessionMode' }, ($, e) => { const { Text } = $.ui.resolve(e); return <Text>{e.props.modes.join(',')}</Text> })
   on('session.id', () => ({ value: 'abc-123-def' }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('ui.copy', (_$, e) => ((clip = e.text), { value: { isCopied: true } }))
   for (const surface of ['terminal', 'desktop'] as const) {
     clip = ''
     const ui = await $.ui.mount({ plugin: 'session-info', surface, component: 'SessionMode', props: { modes: [] } })
     const shows = (text: RegExp) => ui.find({ type: 'Text', text, in: 'session-id' })
     expect(await ui.find({ type: 'Text', text: /^Fix the footer$/, in: 'session-name' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /🧠 opus-5-5/ })).toBeDefined()
     expect((await shows(/^abc-123-$/))?.props.color).toBeUndefined()
     await ui.pointer({ type: 'enter', x: 3, y: 0, in: 'session-id' })
     expect((await shows(/^abc-123-$/))?.props.color).toBe('blue')
