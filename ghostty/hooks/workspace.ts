@@ -1,7 +1,6 @@
 // Workspaces: a Ghostty window's tabs of Claude sessions and shells, saved and reopened.
 
 import { safe } from './term'
-import { bare } from './title'
 
 /** A Claude tab resumes its conversation (or the folder's latest, without a known ID); a shell just opens there. */
 export type Pane = { kind: 'claude'; cwd: string; title: string; sessionId?: string } | { kind: 'shell'; cwd: string; title: string }
@@ -159,4 +158,10 @@ export function parseWorkspace(text: string): Workspace | undefined {
   } catch {
     return undefined
   }
+}
+
+/** A tab's title without the ✳ or ❓ this mod puts in front; '' for the default "Claude Code". */
+export function bare(tabName: string): string {
+  const words = tabName.replace(/^[✳❓]️?\s*/u, '').trim()
+  return words === 'Claude Code' ? '' : words
 }

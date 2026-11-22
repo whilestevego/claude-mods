@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { fakeSessionInfo } from './fakes'
+
 // The test environment has timers; the plugin typings (no DOM, no Node) just don't declare them.
 declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
 const settle = () => new Promise(r => setTimeout(r, 20))
@@ -8,18 +10,15 @@ const settle = () => new Promise(r => setTimeout(r, 20))
 /** Fakes the machine: Claude on /dev/ttys004 among Ghostty's terminals; `written` collects what reaches the tab. */
 function machine(on: On, opts: { toolFails?: boolean; term?: string } = {}) {
   const written: string[] = []
-  /** Claude Code's record of this session: 'dialog' while its permission dialog is up. */
-  const claude = { status: 'busy' }
+  const info = fakeSessionInfo(on, { sessionId: 's', title: 'Tab Progress Bar' })
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const script = argv[2] ?? ''
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
     if (script.includes('printf') || script.includes('perform action')) written.push(argv[4]!)
-    return out(script.includes('ps -o tty') ? '/dev/ttys004 4242\n' : '')
+    return out('')
   })
   on('session.id', () => ({ value: 's' }) as never)
-  on('session.messages', () => ({ value: [{ role: 'user', text: 'Build the progress bar', toolUses: [] }] }) as never)
-  on('model.complete', () => ({ value: { isAnswered: true, text: 'Tab Progress Bar', usage: {} } }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('command.run', () => ({ text: '' }))
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
@@ -30,15 +29,10 @@ function machine(on: On, opts: { toolFails?: boolean; term?: string } = {}) {
   on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
   on('tool.call', () => ({ result: {}, text: '', isError: opts.toolFails === true }) as never)
   on('tool.check', () => ({ decision: 'ask' }) as never)
-  on('fs.read', (_$, e) => {
-    if ((e as { path: string }).path !== '/home/me/.claude/sessions/4242.json') return { deny: 'missing' } as never
-    const waiting = claude.status === 'dialog' ? { status: 'waiting', waitingFor: 'permission prompt' } : { status: 'busy' }
-    return { value: JSON.stringify({ pid: 4242, ...waiting }) } as never
-  })
   on('ui.render', () => ({ type: 'Box', children: [] }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('ui.notify', (_$, e) => (written.push(`notify:${e.title};${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
-  return Object.assign(written, { claude })
+  return Object.assign(written, { openDialog: info.openDialog, finish: info.finish })
 }
 
 const start = { cwd: '/', surface: 'terminal' as const, isInteractive: true }
@@ -76,7 +70,7 @@ test('waiting on you: ❓ in the title and a paused bar, and no notification (th
   await $.session.start(start)
   await $.prompt.submit(submit)
   await asks($, 'u1')
-  w.claude.status = 'dialog'
+  w.openDialog()
   await clock.advance(600)
   await settle(); await clock.advance(200)
   expect(w).toContain('set_surface_title:❓ Tab Progress Bar')
@@ -93,7 +87,7 @@ test('other calls finishing while a dialog is up leave the ❓; answering it cle
   await $.session.start(start)
   await $.prompt.submit(submit)
   await asks($, 'u1')
-  w.claude.status = 'dialog'
+  w.openDialog()
   await clock.advance(600)
   await settle(); await clock.advance(200)
   const titles = () => w.filter(s => s.startsWith('set_surface_title:'))
@@ -138,7 +132,8 @@ test('auto mode approving a call that asks is not waiting on you', async ($, on)
   await asks($, 'u1')
   await clock.advance(1600)                                      // the checker thinks; no dialog
   await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
-  w.claude.status = 'dialog'                                     // a later dialog is another call's
+  w.finish('u1')                                                 // session-info saw the call run
+  w.openDialog()                                     // a later dialog is another call's
   await clock.advance(1000)
   await settle(); await clock.advance(200)
   expect(w.some(s => s.includes('❓') || s.startsWith('notify:'))).toBe(false)

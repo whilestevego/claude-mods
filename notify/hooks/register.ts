@@ -2,12 +2,14 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { channel, checkinLine, doing, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 import type { Channel } from './lines'
-// The contracts this mod reads: turn-receipt's TL;DR for a turn, say's voice, and the terminal mods' focus. A renamed key there fails
+// The contracts this mod reads: turn-receipt's TL;DR for a turn, say's voice, the terminal mods' focus, and
+// session-info's permission dialogs. A renamed key there fails
 // type-checking here.
 import type {} from '../../turn-receipt/types'
 import type {} from '../../say/types'
 import type {} from '../../ghostty/types'
 import type {} from '../../rex/types'
+import type {} from '../../session-info/types'
 
 type Config = {
   when: string
@@ -55,9 +57,6 @@ const HELP = [
 
 // The module's own session state; a reload starts it over.
 let cfg: Config
-/** Claude's own process: its session record says when a permission dialog is up. */
-let pid = ''
-let home = ''
 /** The herald source, made with the first banner that herald posts. Why it couldn't be made, if so. */
 let source: Promise<string | undefined> | undefined
 /** The session's folder name, heading its banners so you can tell sessions apart. */
@@ -68,21 +67,6 @@ let checkin: { cancel(): void } | undefined
 const now = { task: '', taskId: '', step: '' }
 /** Each task's spinner label, by id, so marking one in progress can name it. */
 const tasks = new Map<string, string>()
-/** Calls the permission check put to you, until they run or are refused. */
-const asking = new Set<string>()
-
-// The pid of Claude itself: the nearest ancestor named claude (the mods' own host process sits between it and this
-// shell, and changes when mods reload). No API names it.
-const FIND_CLAUDE = `p=$$
-while [ "$p" -gt 1 ]; do
-  c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$p"; exit; }
-  p=$(ps -o ppid= -p "$p" | tr -d ' ')
-done`
-
-async function locate($: EngineInterface) {
-  home = (await $.env.get('HOME')) ?? ''
-  pid = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim()
-}
 
 /**
  * The shell command that brings you back to this session's tab, from the terminal mod that knows the terminal. Empty
@@ -152,32 +136,9 @@ async function speak($: EngineInterface, text: string) {
   }
 }
 
-/** Claude Code's record of this session (~/.claude/sessions/<pid>.json) says its permission dialog is up. */
-function asksPermission(record: string): boolean {
-  try {
-    const r = JSON.parse(record) as { status?: unknown; waitingFor?: unknown }
-    return r.status === 'waiting' && typeof r.waitingFor === 'string' && /permission/i.test(r.waitingFor)
-  } catch {
-    return false
-  }
-}
-
-/**
- * A call that asks waits in Claude Code's dialog, or in auto mode its checker. Only the dialog marks the session
- * record waiting, so watch it while the call is pending. Mods hear neither classic.PermissionRequest nor
- * classic.Notification while a dialog is up (checked on 2.1.301), so this file is the only sign.
- */
+/** A call that asks waits in Claude Code's dialog, or in auto mode its checker; session-info tells them apart. */
 async function watchForDialog($: EngineInterface, id: string, tool: string) {
-  if (!pid || !home) return
-  asking.add(id)
-  // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
-  for (let i = 0; i < 1200; i++) {
-    await $.clock.sleep(500)
-    if (!asking.has(id)) return
-    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) {
-      return alert($, cfg.needsYou, `Claude needs your permission to use ${tool}.`)
-    }
-  }
+  if (await $.sessionInfo.dialogFor({ id })) await alert($, cfg.needsYou, `Claude needs your permission to use ${tool}.`)
 }
 
 /** turn-receipt's TL;DR for this turn, when turn-receipt is on: one summary, shown and told. Empty when it has none. */
@@ -257,7 +218,6 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
-    await locate($)
     await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify haiku to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)
@@ -301,15 +261,10 @@ export const register: Register = (on, options) => {
     return r
   }).catch(($, e, next) => next(e))
 
-  // A call that ran or was refused is no longer waiting on you.
   on('tool.call', async ($, e, next) => {
-    try {
-      const r = await next(e)
-      track(e, r)
-      return r
-    } finally {
-      asking.delete((e as { tool_use_id?: string }).tool_use_id ?? '')
-    }
+    const r = await next(e)
+    track(e, r)
+    return r
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {

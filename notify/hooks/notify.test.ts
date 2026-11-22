@@ -12,10 +12,13 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   const told: string[] = []
   /** Where a click on each herald banner goes: its tty. */
   const clicksTo: string[] = []
+  /** Calls that wait on session-info's answer about a permission dialog, by id. */
+  const dialogs = new Map<string, (isUp: boolean) => void>()
   on('ui.notify', (_$, e) => (told.push(`banner:${e.title}|${e.text}`), { value: { isSent: true, channel: 'ghostty' } }) as never)
-  // Stand-ins for the say mod ($.voice) and the ghostty mod ($.ghostty), each answered by a hook below.
+  // Stand-ins for the say mod ($.voice), the ghostty mod ($.ghostty) and session-info, each answered by a hook below.
   on('engine.create', async (_$, e, next) => ({
     ...(await next(e)),
+    sessionInfo: { dialogFor: async () => false },
     ...(hasVoice && { voice: { say: async () => ({ isSpoken: false }) } }),
     ...(hasGhostty && { ghostty: { isFocused: async () => false, showCommand: async () => '' } }),
   }))
@@ -27,6 +30,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
     on('ghostty.isFocused', () => ({ value: focused.tty === '/dev/ttys004' }))
     on('ghostty.showCommand', () => ({ value: 'show /dev/ttys004' }))
   }
+  on('sessionInfo.dialogFor', (_$, e) => new Promise(answer => dialogs.set(e.id, isUp => answer({ value: isUp }))))
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
@@ -56,7 +60,7 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   on('session.measure', (_$, e) => ({ changed: e.changed }) as never)
   on('command.register', () => ({ value: {} }) as never)
   on('ui.toast', (_$, e) => (told.push(`toast:${e.text}`), { value: undefined }) as never)
-  return Object.assign(told, { clicksTo })
+  return Object.assign(told, { clicksTo, dialogs })
 }
 
 const start = { cwd: '/work/brilliant', surface: 'terminal' as const, isInteractive: true }
@@ -105,17 +109,14 @@ test('off means off', { options: { turnDone: 'off' } }, async ($, on) => {
 })
 
 test('a permission dialog is announced; auto mode approving a call is not', { options: { needsYou: 'banner' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  const files: Record<string, string> = { '/home/me/.claude/sessions/4242.json': JSON.stringify({ status: 'busy' }) }
-  const told = machine(on, { tty: '' }, files)
+  const told = machine(on, { tty: '' })
   await $.session.start(start)
   const asks = (id: string) => $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: id } as never)
   await asks('u1')
-  await clock.advance(1600) // the checker approves; no dialog
-  await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'u1' } as never)
   await asks('u2')
-  files['/home/me/.claude/sessions/4242.json'] = JSON.stringify({ status: 'waiting', waitingFor: 'permission prompt' })
-  await clock.advance(600)
+  await settle()
+  told.dialogs.get('u1')!(false) // the checker approved it: no dialog
+  told.dialogs.get('u2')!(true)
   await settle()
   expect(told).toEqual([`banner:${TITLE}|Claude needs your permission to use Bash.`])
 })

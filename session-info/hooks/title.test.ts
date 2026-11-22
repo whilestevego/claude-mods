@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { ask, bare, clean, context } from './title'
+import { ask, clean, context } from './title'
 
 test('clean', () => {
   expect(clean('Rate Limit Gauge Fix')).toBe('Rate Limit Gauge Fix')
@@ -29,11 +29,4 @@ test('context: the last 10 requests and the latest reply, skipping markup', () =
   expect(c.prompts).toEqual(Array.from({ length: 10 }, (_, i) => `ask ${i + 2}`))
   expect(c.answer).toBe('last answer')
   expect(context([])).toEqual({ prompts: [], answer: '' })
-})
-
-test('bare drops the badge and the default title', () => {
-  expect(bare('✳ Feature Videos Page Fix')).toBe('Feature Videos Page Fix')
-  expect(bare('❓ Feature Videos')).toBe('Feature Videos')
-  expect(bare('✳ Claude Code')).toBe('')
-  expect(bare('~/work')).toBe('~/work')
 })

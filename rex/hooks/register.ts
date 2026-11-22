@@ -1,7 +1,7 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type {} from '../types'
-
-import { ask, clean, context } from './title'
+// session-info's contract: this mod asks it for the tab titles.
+import type {} from '../../session-info/types'
 
 type Config = { tabTitle: boolean; titleMinutes: number }
 
@@ -13,7 +13,6 @@ function config(o: PluginOptions): Config {
 }
 
 let cfg: Config
-let home = ''
 let titledAt = 0
 
 /** Rex's CLI and this session's pane, set at session start; empty outside Rex. */
@@ -85,27 +84,16 @@ async function label($: EngineInterface, words: string) {
   if (window) await $.process.run([rex.bin, 'window', 'rename', '-s', rex.session, window, words])
 }
 
-// Each conversation's title, shared with the ghostty mod, so a resumed conversation gets its title back in either terminal.
-const titleDir = () => `${home}/Library/Caches/claude-ghostty/titles`
-const titleFile = (sessionId?: string) => (home && sessionId && /^[0-9a-f-]{8,64}$/i.test(sessionId) ? `${titleDir()}/${sessionId}` : undefined)
-
-/** A new title from the transcript. `answer`: the reply that just ended, which the transcript may not hold yet. */
+/** A new title from the transcript, which session-info saves for the conversation. `answer`: the reply that just ended. */
 async function retitle($: EngineInterface, answer?: string): Promise<string> {
-  const c = context(await $.session.messages())
-  if (c.prompts.length === 0) return ''
-  const r = await $.model.complete({ model: 'haiku', prompt: ask(c.prompts, answer ?? c.answer), maxTokens: 24 })
-  const words = r.isAnswered ? clean(r.text) : ''
-  if (!words) return ''
-  await label($, words)
-  const file = titleFile(await $.session.id())
-  if (file) await $.process.run(['mkdir', '-p', titleDir()]).then(() => $.fs.write(file, words)).catch(() => {})
+  const words = await $.sessionInfo.newTitle({ answer })
+  if (words) await label($, words)
   return words
 }
 
 /** The title this conversation had, or a new one when it has history but no title yet. */
 async function restoreTitle($: EngineInterface) {
-  const file = titleFile(await $.session.id())
-  const saved = file ? clean(await $.fs.read(file).catch(() => '')) : ''
+  const saved = await $.sessionInfo.savedTitle({})
   titledAt = Date.now()
   if (saved) await label($, saved)
   else await retitle($)
@@ -132,7 +120,6 @@ export const register: Register = (on, options) => {
       Object.assign(rex, { bin: `${bin}/rex`, session: (await $.env.get('REX_SESSION')) ?? '', block: (await $.env.get('REX_BLOCK')) ?? '' })
     }
     if (!rex.block || !cfg.tabTitle) return next(e)
-    home = (await $.env.get('HOME')) ?? ''
     void restoreTitle($).catch(() => {})
     await $.command.register({ name: 'title', description: 'A new 4-word tab title for this session, now' })
     return next(e)

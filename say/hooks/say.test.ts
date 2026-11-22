@@ -15,11 +15,13 @@ function machine(on: On, focused: { tty: string }, files: Record<string, string>
   const spoken: string[][] = []
   /** What reached the speakers, in order: 'chime' or 'speech'. */
   const heard: string[] = []
+  // A stand-in for session-info, which finds Claude's pid.
+  on('engine.create', async (_$, e, next) => ({ ...(await next(e)), sessionInfo: { process: async () => ({ pid: '', tty: '' }) } }))
+  on('sessionInfo.process', () => ({ value: { pid: '4242', tty: '/dev/ttys004' } }))
   on('process.run', (_$, e) => {
     const argv = e.argv as string[]
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } }) as never
     if (argv[0] === 'sh' && argv[2]?.includes('kill -0')) return out(argv.slice(4).filter(p => alive.includes(p)).join('\n'))
-    if (argv[0] === 'sh') return out('ttys004 4242\n')
     if (argv[0] === 'osascript') return out(focused.tty)
     if (argv[0] === 'murmur' && argv[1] === 'voices') return out(VOICES)
     if (argv[0] === 'murmur') spoken.push(argv), heard.push('speech')

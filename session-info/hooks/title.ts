@@ -29,9 +29,3 @@ export function ask(prompts: readonly string[], answer: string): string {
     'Summarize what this session is about in exactly 4 words, Title Case. Reply with the 4 words only.',
   ].join('\n')
 }
-
-/** A tab's title without the ✳ or ❓ this mod puts in front; '' for the default "Claude Code". */
-export function bare(tabName: string): string {
-  const words = tabName.replace(/^[✳❓]️?\s*/u, '').trim()
-  return words === 'Claude Code' ? '' : words
-}

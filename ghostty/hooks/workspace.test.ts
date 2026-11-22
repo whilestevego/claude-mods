@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, sameWorkspace, slug, startCommand, summary } from './workspace'
+import { bare, claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, sameWorkspace, slug, startCommand, summary } from './workspace'
 
 const lines = [
   '1\t/dev/ttys002\t/u/work/brilliant\t✳ Feature videos',
@@ -79,4 +79,11 @@ test('close every Claude pane but my own; shells stay', () => {
     { id: 'T2', tty: '/dev/ttys002', pid: '2', title: 'A' },
     { id: 'T3', tty: '/dev/ttys003', pid: '3', title: 'B' },
   ])
+})
+
+test('bare drops the badge and the default title', () => {
+  expect(bare('✳ Feature Videos Page Fix')).toBe('Feature Videos Page Fix')
+  expect(bare('❓ Feature Videos')).toBe('Feature Videos')
+  expect(bare('✳ Claude Code')).toBe('')
+  expect(bare('~/work')).toBe('~/work')
 })

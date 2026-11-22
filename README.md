@@ -38,6 +38,10 @@ can have the same name, but the ref is different for each. Use the full name wit
 - Click any of them to copy it.
 - Ctrl-click one to copy the full `claude --resume <id>` command.
 
+Other mods use session-info too. ghostty, rex and say get Claude's process from it. ghostty
+and rex get the tab titles from it, and ghostty and notify learn from it when a permission
+dialog is up. Keep session-info on when you use those mods.
+
 ### turn-receipt
 
 Adds a receipt to the line that closes each turn ("✻ Baked for 42s"): how many tools ran,
@@ -205,6 +209,7 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
 
 ## Requirements
 
+- **ghostty**, **rex**, **notify** and **say** need **session-info** on for some of their features (see [session-info](#session-info)).
 - **ghostty** needs Ghostty 1.3 or newer on macOS. Set
   `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` in Ghostty only, so Claude Code doesn't overwrite
   the tab title. That variable also stops Claude Code's status reports to Rex. In

@@ -4,14 +4,15 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { WorkspaceRow } from '../types'
 
 import { progress, Progress, runningBar, showCommand, tabTitle, titleAction } from './term'
-import { asksPermission, parseEntry } from './registry'
+import { parseEntry } from './registry'
 import type { Entry, Status } from './registry'
-import { ask, bare, clean, context } from './title'
 import {
-  claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, parseWorkspace, sameWorkspace, slug,
+  bare, claudePidsFrom, cleanName, closable, conversationOf, fromWindow, namePrompt, openScript, parseWorkspace, sameWorkspace, slug,
   summary as describe,
 } from './workspace'
 import type { Workspace } from './workspace'
+// session-info's contract: this mod asks it for Claude's tty, the tab titles and permission dialogs.
+import type {} from '../../session-info/types'
 
 type Config = {
   tabTitle: boolean
@@ -39,8 +40,6 @@ let titledAt = 0
 let hasFailed = false
 let isRunning = false
 let isWaiting = false
-/** Calls the permission check put to you, until they run or are refused. */
-const asking = new Set<string>()
 /** The calls waiting on you right now (a dialog that's up, a question): ❓ until the last of them is answered. */
 const waitingOn = new Set<string>()
 let home = ''
@@ -50,24 +49,14 @@ let statusSince = 0
 const workspaceRows = atom({ plugin: 'ghostty', key: 'workspaces' } as const, [])
 const WORKSPACES = 'claude-workspaces'
 
-// "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
-// this shell, owns the tty too). Without one, the nearest ancestor owning a tty. No API names Claude's tty or pid.
-const FIND_TTY = `p=$$
-first=
-while [ "$p" -gt 1 ]; do
-  t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case "$t" in ''|'?'|'??') ;; *) [ -z "$first" ] && first="/dev/$t $p"
-    c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "/dev/$t $p"; exit; } ;;
-  esac
-  p=$(ps -o ppid= -p "$p" | tr -d ' ')
-done
-echo "$first"`
-
-/** Finds Claude's tty, in Ghostty only. Elsewhere tty stays empty, and with it everything this mod does. */
+/**
+ * Finds Claude's tty, in Ghostty only, from the session-info mod. Elsewhere, or without session-info, tty stays
+ * empty, and with it everything this mod does.
+ */
 async function locate($: EngineInterface) {
   home = (await $.env.get('HOME')) ?? ''
   if (((await $.env.get('TERM_PROGRAM')) ?? '').toLowerCase() !== 'ghostty') return
-  ;[tty = '', pid = ''] = (await $.process.run(['sh', '-c', FIND_TTY])).stdout.trim().split(' ')
+  ;({ tty, pid } = await $.sessionInfo.process().catch(() => ({ tty: '', pid: '' })))
 }
 
 // The tty of the terminal Ghostty has focused, or nothing when Ghostty isn't the frontmost app.
@@ -122,19 +111,9 @@ async function waitOnYou($: EngineInterface, id: string) {
   await Promise.all([drawTitle($), drawBar($)])
 }
 
-/**
- * A call that asks waits in Claude Code's dialog, or in auto mode its checker. Only the dialog marks the session
- * record waiting, so watch it while the call is pending. Mods hear neither classic.PermissionRequest nor
- * classic.Notification while a dialog is up (checked on 2.1.301), so this file is the only sign.
- */
+/** A call that asks waits in Claude Code's dialog, or in auto mode its checker; session-info tells them apart. */
 async function watchForDialog($: EngineInterface, id: string) {
-  asking.add(id)
-  // ponytail: polls every half second, 10 minutes at most; an event for the dialog would replace it.
-  for (let i = 0; i < 1200; i++) {
-    await $.clock.sleep(500)
-    if (!asking.has(id)) return
-    if (asksPermission(await $.fs.read(`${home}/.claude/sessions/${pid}.json`).catch(() => ''))) return waitOnYou($, id)
-  }
+  if (await $.sessionInfo.dialogFor({ id })) await waitOnYou($, id)
 }
 
 /** `id` was answered; the ❓ goes once nothing else waits on you. */
@@ -145,31 +124,18 @@ async function answered($: EngineInterface, id: string) {
   await Promise.all([drawTitle($), drawBar($)])
 }
 
-/**
- * A new title from the transcript (so a resumed session has its history), remembered for its conversation.
- * `answer`: the reply that just ended, which the transcript may not hold yet. '' when there's nothing to summarize.
- */
+/** A new title from the transcript, which session-info saves for the conversation. '' when there's nothing to summarize. */
 async function retitle($: EngineInterface, answer?: string): Promise<string> {
-  const c = context(await $.session.messages())
-  if (c.prompts.length === 0) return ''
-  const r = await $.model.complete({ model: 'haiku', prompt: ask(c.prompts, answer ?? c.answer), maxTokens: 24 })
-  const words = r.isAnswered ? clean(r.text) : ''
+  const words = await $.sessionInfo.newTitle({ answer })
   if (!words) return ''
   summary = words
   await drawTitle($)
-  const file = titleFile(await $.session.id())
-  if (file) await $.process.run(['mkdir', '-p', titleDir()]).then(() => $.fs.write(file, words)).catch(() => {})
   return words
 }
 
-// Each conversation's title, so resuming it (or reopening its workspace) puts the title back.
-const titleDir = () => `${home}/Library/Caches/claude-ghostty/titles`
-const titleFile = (sessionId?: string) => (home && sessionId && /^[0-9a-f-]{8,64}$/i.test(sessionId) ? `${titleDir()}/${sessionId}` : undefined)
-
 /** The title this conversation had, or a new one when it has history but no title yet. */
 async function restoreTitle($: EngineInterface) {
-  const file = titleFile(await $.session.id())
-  const saved = file ? clean(await $.fs.read(file).catch(() => '')) : ''
+  const saved = await $.sessionInfo.savedTitle({})
   titledAt = Date.now()
   if (!saved) return void (await retitle($))
   summary = saved
@@ -345,10 +311,10 @@ async function openWorkspace($: EngineInterface, file: string): Promise<string> 
   const ws = parseWorkspace(await $.fs.read(file).catch(() => ''))
   if (!ws) return "That workspace couldn't be read."
   // Each Claude tab's saved title, for its session to pick up when it resumes; a title the session saved itself wins.
-  await $.process.run(['mkdir', '-p', titleDir()])
   for (const p of ws.tabs.flat()) {
-    const file = p.kind === 'claude' ? titleFile(p.sessionId) : undefined
-    if (file && bare(p.title) && !(await $.fs.stat(file).then(() => true, () => false))) await $.fs.write(file, clean(bare(p.title)))
+    if (p.kind !== 'claude' || !p.sessionId || !bare(p.title)) continue
+    const sessionId = p.sessionId
+    if (!(await $.sessionInfo.savedTitle({ sessionId }).catch(() => ''))) await $.sessionInfo.saveTitle({ sessionId, title: bare(p.title) }).catch(() => {})
   }
   const r = await $.process.run(['osascript', '-e', openScript(ws)])
   return r.exitCode === 0 ? `Opened "${ws.name}": ${describe(ws)}.` : `Ghostty couldn't open it: ${r.stderr.trim().slice(0, 160)}`
@@ -464,7 +430,6 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     const id = e.tool_use_id ?? ''
-    asking.delete(id)
     const failed = ran.deny === undefined && ran.isError === true
     if (!e.agentId && failed !== hasFailed) {
       hasFailed = failed

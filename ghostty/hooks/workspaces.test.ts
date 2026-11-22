@@ -1,12 +1,14 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
+
+import { fakeSessionInfo } from './fakes'
+
 // The test environment has timers; the plugin typings just don't declare them.
 declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
 
 const start = { cwd: '/home/me/work', surface: 'terminal' as const, isInteractive: true }
 const STATUS = '/home/me/Library/Caches/claude-ghostty/sessions'
 const WS = '/home/me/.claude/workspaces'
-const TITLES = '/home/me/Library/Caches/claude-ghostty/titles'
 
 /** A fake machine: three Claude tabs in Ghostty, a disk, and a record of every AppleScript run. */
 const killed: string[] = []
@@ -14,8 +16,9 @@ const ran: string[] = []
 const printed: string[] = []
 let stillRunning: string[] = []
 
-function machine(on: On, files: Record<string, string>) {
+function machine(on: On, files: Record<string, string>, titles: Record<string, string> = {}) {
   const scripts: string[][] = []
+  fakeSessionInfo(on, { sessionId: 'aaaaaaaa-1111-2222-3333-444444444444', title: 'Brilliant Admin Work', titles })
   killed.length = 0
   ran.length = 0
   printed.length = 0
@@ -126,19 +129,19 @@ test('a resumed session gets its title back; /workspace open hands each tab its 
   const me = 'aaaaaaaa-1111-2222-3333-444444444444'
   const other = 'bbbbbbbb-0000-0000-0000-000000000000'
   const pane = (sessionId: string, title: string) => [{ kind: 'claude', cwd: '/home/me', title, sessionId }]
+  const titles: Record<string, string> = { [me]: 'Saved Session Title Here' }
   const files: Record<string, string> = {
-    [`${TITLES}/${me}`]: 'Saved Session Title Here',
     [`${WS}/sprint.json`]: JSON.stringify({ name: 'Sprint', savedAt: 1, tabs: [pane(me, 'Older Title'), pane(other, 'Admin redesign')] }),
   }
-  machine(on, files)
+  machine(on, files, titles)
   await $.session.start(start)
   await new Promise(r => setTimeout(r, 20))
   expect(printed).toContain('set_surface_title:✳ Saved Session Title Here')
   await $.command.run({ command: 'workspace', args: 'open sprint' } as never)
-  expect(files[`${TITLES}/${other}`]).toBe('Admin redesign')               // no title of its own yet: the saved one
-  expect(files[`${TITLES}/${me}`]).toBe('Saved Session Title Here')        // its own, newer title wins
+  expect(titles[other]).toBe('Admin redesign')               // no title of its own yet: the saved one
+  expect(titles[me]).toBe('Saved Session Title Here')        // its own, newer title wins
   expect((await $.command.run({ command: 'title', args: '' } as never)).text).toBe('Tab title: Brilliant Admin Work')
-  expect(files[`${TITLES}/${me}`]).toBe('Brilliant Admin Work')
+  expect(titles[me]).toBe('Brilliant Admin Work')
   expect(printed.at(-1)).toBe('set_surface_title:✳ Brilliant Admin Work')
 })
 

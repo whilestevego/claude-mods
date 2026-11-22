@@ -1,6 +1,8 @@
 import type { EngineInterface, PluginOptions, Register, RenderNode } from 'claude-code'
 
 import type { VoiceSaid } from '../types'
+// session-info's contract: this mod asks it for Claude's pid.
+import type {} from '../../session-info/types'
 
 import { prose, voiceList } from './speech'
 import { byGrade, claimVoice, matchVoice, parseCatalog, parseTable, weightedPick } from './voices'
@@ -29,7 +31,8 @@ const isMuted = async ($: EngineInterface) => (await $.state.get(MUTED)).value =
 
 // The module's own session state; a reload starts it over.
 let cfg: Config
-let claude: { tty: string; pid: string } | null = null
+/** Claude's own process, from session-info: its pid keys this session's voice. */
+let claude: { pid: string } | null = null
 let home = ''
 /** This mod's folder, for its chime. */
 let root = ''
@@ -45,23 +48,10 @@ const currentVoice = () => chosen || cfg.voice || sessionVoice || 'af_heart'
 let picker: { voices: VoiceInfo[]; others: Set<string> } = { voices: [], others: new Set() }
 let lastAnswer = ''
 
-// "<tty> <pid>" of Claude itself: the nearest ancestor named claude (the mods' own host process, between it and
-// this shell, owns the tty too, and changes when mods reload). Its pid keys the session's voice. No API names either.
-const FIND_CLAUDE = `p=$$
-first=
-while [ "$p" -gt 1 ]; do
-  t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case "$t" in ''|'?'|'??') ;; *) [ -z "$first" ] && first="$t $p"
-    c=$(ps -o comm= -p "$p"); [ "\${c##*/}" = claude ] && { echo "$t $p"; exit; } ;;
-  esac
-  p=$(ps -o ppid= -p "$p" | tr -d ' ')
-done
-echo "$first"`
-
 async function locate($: EngineInterface) {
   home = (await $.env.get('HOME')) ?? ''
-  const [tty, pid] = (await $.process.run(['sh', '-c', FIND_CLAUDE])).stdout.trim().split(' ')
-  claude = tty && pid ? { tty, pid } : null
+  const { pid } = await $.sessionInfo.process().catch(() => ({ pid: '' }))
+  claude = pid ? { pid } : null
 }
 
 // /say's choice, kept per conversation so resuming it (or reopening its workspace) keeps the voice.
