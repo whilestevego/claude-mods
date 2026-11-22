@@ -2,9 +2,9 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import { channel, checkinLine, doing, errorLine, firstSentence, prose, rateLimitLine, summaryPrompt, taskLine } from './lines'
 import type { Channel } from './lines'
-// The contracts this mod reads: tldr's line for a turn, say's voice, and the terminal mods' focus. A renamed key there fails
+// The contracts this mod reads: turn-receipt's TL;DR for a turn, say's voice, and the terminal mods' focus. A renamed key there fails
 // type-checking here.
-import type {} from '../../tldr/types'
+import type {} from '../../turn-receipt/types'
 import type {} from '../../say/types'
 import type {} from '../../ghostty/types'
 import type {} from '../../rex/types'
@@ -40,7 +40,7 @@ function config(o: PluginOptions): Config {
 
 /** Rate-limit windows already warned about, as "kind@resetsAt": in $.store, so one warning covers every session. */
 const WARNED = 'warnedLimits'
-/** Set once the /notify test hint has been shown: in $.store, so it shows once, not once per session. */
+/** Set once the /notify haiku hint has been shown: in $.store, so it shows once, not once per session. */
 const HINTED = 'hintedTest'
 
 /** System Settings' Notifications page, for a terminal that herald can't come back to. */
@@ -49,8 +49,7 @@ const SETTINGS = 'x-apple.systempreferences:com.apple.Notifications-Settings.ext
 const SOURCE = 'claude'
 
 const HELP = [
-  '/notify test      send a desktop notification now, to check they show up',
-  '/notify haiku     send one with a fresh haiku from Claude Haiku',
+  '/notify haiku     send a desktop notification with a fresh haiku, to check they show up',
   "/notify settings  open your terminal's notification settings",
 ].join('\n')
 
@@ -181,13 +180,13 @@ async function watchForDialog($: EngineInterface, id: string, tool: string) {
   }
 }
 
-/** The tldr mod's line for this turn, when tldr is enabled: one summary, shown and told. Empty when it has none. */
+/** turn-receipt's TL;DR for this turn, when turn-receipt is on: one summary, shown and told. Empty when it has none. */
 async function tldrLine($: EngineInterface, turnId: string): Promise<string> {
   const rows = await $.config.list().catch(() => [])
-  if (!rows.some(r => r.key.startsWith('tldr.'))) return ''
-  // tldr publishes after its own Haiku call (8 s at most); a short reply publishes an empty line at once.
+  if (!rows.some(r => r.key.startsWith('turn-receipt.'))) return ''
+  // turn-receipt publishes after its own Haiku call (8 s at most); a short reply publishes an empty line at once.
   for (let waited = 0; waited <= 10_000; waited += 250) {
-    const held = await $.state.get({ plugin: 'tldr', key: 'line' })
+    const held = await $.state.get({ plugin: 'turn-receipt', key: 'line' })
     if (held.value?.turnId === turnId) return held.value.text ?? ''
     await $.clock.sleep(250)
   }
@@ -204,16 +203,9 @@ async function summarize($: EngineInterface, turnId: string, request: string, an
 }
 
 /**
- * macOS can't tell a mod whether it shows the terminal's notifications (Notification Center's prefs are undocumented
- * and lag behind the toggle), so the reliable check is to send one and look.
+ * A test banner whose text Claude Haiku writes: a fresh one each time, so you can tell it's the one you just sent.
+ * macOS can't tell a mod whether it shows the terminal's notifications, so the reliable check is to send one and look.
  */
-async function testBanner($: EngineInterface): Promise<{ text: string }> {
-  const failed = await banner($, 'This is what notify alerts look like. Click it to come back to this tab.')
-  if (failed) return { text: `Couldn't send a notification (${failed}).` }
-  return { text: "🔔 Sent. Didn't see a banner? /notify settings opens the switch for it." }
-}
-
-/** A test banner whose text Claude Haiku writes: a fresh one each time, so you can tell it's the one you just sent. */
 async function haikuBanner($: EngineInterface): Promise<{ text: string }> {
   const r = await $.model.complete({ model: 'haiku', prompt: 'Write one haiku about a desktop notification arriving. Reply with only its three lines.', maxTokens: 60 })
   const haiku = r.isAnswered ? prose(r.text).trim() : ''
@@ -228,7 +220,7 @@ async function openSettings($: EngineInterface): Promise<{ text: string }> {
   const viaHerald = click !== '' && !(await source)
   const r = viaHerald ? await herald($, ['settings', SOURCE]) : await $.process.run(['open', SETTINGS])
   if (r.exitCode !== 0) return { text: `Couldn't open System Settings: ${failure(r)}` }
-  return { text: `Opened System Settings. Turn on Allow notifications${viaHerald ? ' for Claude Code' : ''}, then /notify test.` }
+  return { text: `Opened System Settings. Turn on Allow notifications${viaHerald ? ' for Claude Code' : ''}, then /notify haiku.` }
 }
 
 const title = () => (folder ? `Claude Code · ${folder}` : 'Claude Code')
@@ -266,17 +258,16 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     folder = e.cwd.replace(/\/+$/, '').split('/').pop() ?? ''
     await locate($)
-    await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify test (or haiku) to check they show up, /notify settings to turn them on' })
+    await $.command.register({ name: 'notify', description: 'Desktop notifications: /notify haiku to check they show up, /notify settings to turn them on' })
     if (sendsBanners() && (await $.store.get(HINTED)) !== true) {
       await $.store.set(HINTED, true)
-      $.ui.toast('notify: run /notify test to check desktop notifications show up')
+      $.ui.toast('notify: run /notify haiku to check desktop notifications show up')
     }
     return next(e)
   })
 
   on('command.run', { command: 'notify' }, async ($, e) => {
     switch (e.args.trim().toLowerCase()) {
-      case 'test': return testBanner($)
       case 'haiku': return haikuBanner($)
       case 'settings': return openSettings($)
       default: return { text: HELP }

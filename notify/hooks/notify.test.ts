@@ -188,9 +188,9 @@ test('a check-in names the task in progress, else the latest step', { options: {
   expect(told.at(-1)).toBe('voice:Still working on listing files, 3 minutes in.')
 })
 
-test('with the tldr mod on, its line is the summary and no Haiku call is made', { options: { turnDone: 'voice' } }, async ($, on) => {
+test('with turn-receipt on, its TL;DR is the summary and no Haiku call is made', { options: { turnDone: 'voice' } }, async ($, on) => {
   let haikuCalls = 0
-  on('config.list', () => ({ value: [{ key: 'tldr.minChars', value: 600 }] }) as never)
+  on('config.list', () => ({ value: [{ key: 'turn-receipt.minChars', value: 600 }] }) as never)
   on('state.get', () => ({ value: { value: { turnId: 't', text: 'Built the tab progress bar.' }, version: 1 } }) as never)
   on('model.complete', () => (haikuCalls++, { value: { isAnswered: true, text: 'Own line.', usage: {} } }) as never)
   const told = machine(on, { tty: '' })
@@ -201,8 +201,8 @@ test('with the tldr mod on, its line is the summary and no Haiku call is made', 
   expect(haikuCalls).toBe(0)
 })
 
-test('when tldr has no line for the turn, Haiku writes one', { options: { turnDone: 'voice' } }, async ($, on) => {
-  on('config.list', () => ({ value: [{ key: 'tldr.minChars', value: 600 }] }) as never)
+test('when turn-receipt has no TL;DR for the turn, Haiku writes one', { options: { turnDone: 'voice' } }, async ($, on) => {
+  on('config.list', () => ({ value: [{ key: 'turn-receipt.minChars', value: 600 }] }) as never)
   on('state.get', () => ({ value: { value: { turnId: 't', text: '' }, version: 1 } }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'Own line.', usage: {} } }) as never)
   const told = machine(on, { tty: '' })
@@ -220,32 +220,27 @@ test('without the say mod, banners still go out and voice lines are dropped', { 
   expect(told).toEqual([`banner:${TITLE}|Shipped it.`])
 })
 
-test('/notify test sends a banner at once, even while this terminal is focused', async ($, on) => {
-  const told = machine(on, { tty: '/dev/ttys004' })
-  await $.session.start(start)
-  expect((await $.command.run({ command: 'notify', args: 'test' } as never)).text).toContain('/notify settings')
-  expect(told).toEqual([`banner:${TITLE}|This is what notify alerts look like. Click it to come back to this tab.`])
-})
-
 test("a banner is herald's, and its click comes back to this session's tab", async ($, on) => {
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'Ding', usage: {} } }) as never)
   const told = machine(on, { tty: '' })
   await $.session.start(start)
-  await $.command.run({ command: 'notify', args: 'test' } as never)
+  await $.command.run({ command: 'notify', args: 'haiku' } as never)
   expect(told.clicksTo).toEqual(['show /dev/ttys004'])
 })
 
-test('/notify haiku sends a banner with the haiku Claude Haiku wrote', async ($, on) => {
+test('/notify haiku sends a banner with the haiku Claude Haiku wrote, even while this terminal is focused', async ($, on) => {
   on('model.complete', () => ({ value: { isAnswered: true, text: 'A soft chime rings out\nthe tab across the Spaces\ncalls you home again', usage: {} } }) as never)
-  const told = machine(on, { tty: '' })
+  const told = machine(on, { tty: '/dev/ttys004' })
   await $.session.start(start)
   expect((await $.command.run({ command: 'notify', args: 'haiku' } as never)).text).toContain('calls you home again')
   expect(told).toEqual([`banner:${TITLE}|A soft chime rings out\nthe tab across the Spaces\ncalls you home again`])
 })
 
 test("in Ghostty a banner is herald's or none: a source herald couldn't make says why, and Ghostty's own isn't sent", async ($, on) => {
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'Ding', usage: {} } }) as never)
   const told = machine(on, { tty: '' }, {}, { hintedTest: true }, true, true, 'herald: notifications are off for claude')
   await $.session.start(start)
-  expect((await $.command.run({ command: 'notify', args: 'test' } as never)).text).toContain("herald couldn't make its source: notifications are off for claude")
+  expect((await $.command.run({ command: 'notify', args: 'haiku' } as never)).text).toContain("herald couldn't make its source: notifications are off for claude")
   expect(told).toEqual([])
 })
 
@@ -256,12 +251,12 @@ test("/notify settings opens the herald source's notification settings", async (
   expect(told).toEqual(['settings:claude'])
 })
 
-test('the first start hints at /notify test, once across sessions', async ($, on) => {
+test('the first start hints at /notify haiku, once across sessions', async ($, on) => {
   const store: Record<string, unknown> = {}
   const told = machine(on, { tty: '' }, {}, store)
   await $.session.start(start)
   await $.session.start(start)
-  expect(told).toEqual(['toast:notify: run /notify test to check desktop notifications show up'])
+  expect(told).toEqual(['toast:notify: run /notify haiku to check desktop notifications show up'])
 })
 
 test('no hint when no event sends banners', { options: { needsYou: 'voice', turnDone: 'voice', rateLimit: 'off' } }, async ($, on) => {

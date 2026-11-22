@@ -10,8 +10,9 @@ const settle = () => new Promise(r => setTimeout(r, 20))
 const long = 'Long reply. '.repeat(80)
 const done = (answer: string) => ({ answer, durationMs: 30_000, isAborted: false, turnId: 'turn-7', reason: 'answer' }) as never
 
-/** A state store the test can see: what tldr publishes, by key. */
+/** A state store the test can see: what the mod publishes, by key. */
 function store(on: On) {
+  on('session.usage', () => ({ value: { cost: { usd: 1 } } }) as never)
   const values: Record<string, { value: unknown; version: number }> = {}
   const keyOf = (e: unknown) => (e as { ref: { key: string } }).ref?.key ?? (e as { key: string }).key
   on('state.get', (_$, e) => ({ value: values[keyOf(e)] ?? { value: undefined, version: 0 } }) as never)
@@ -35,7 +36,7 @@ test('tldrPrompt bounds its inputs', () => {
   expect(tldrPrompt('a'.repeat(9000), 'b'.repeat(9000)).length).toBeLessThan(6000)
 })
 
-test('a long reply gets a TL;DR under its closing line, published for the voice mod', async ($, on) => {
+test('a long reply gets a TL;DR under its closing line, published for the notify mod', async ($, on) => {
   const values = store(on)
   on('model.complete', () => ({ value: { isAnswered: true, text: 'TL;DR: Built the tab progress bar.', usage: {} } }) as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
@@ -44,7 +45,7 @@ test('a long reply gets a TL;DR under its closing line, published for the voice 
   expect(r.text).toBe(long)  // the reply itself is untouched
   await settle()
   expect(values.line?.value).toEqual({ turnId: 'turn-7', text: 'Built the tab progress bar.' })
-  const ui = await $.ui.mount({ plugin: 'tldr', surface: 'terminal', component: 'TurnDuration', props: { word: 'Cooked', durationMs: 30_000 } as never })
+  const ui = await $.ui.mount({ plugin: 'turn-receipt', surface: 'terminal', component: 'TurnDuration', props: { word: 'Cooked', durationMs: 30_000 } as never })
   expect(await ui.find({ type: 'Text', text: /TL;DR: Built the tab progress bar\./ })).toBeDefined()
 })
 
@@ -57,17 +58,6 @@ test('a short reply gets none, and says so for anyone waiting', async ($, on) =>
   await settle()
   expect(calls).toBe(0)
   expect(values.line?.value).toEqual({ turnId: 'turn-7', text: '' })
-})
-
-test('not added twice when the line beneath already has it (turn-receipt drew it)', async ($, on) => {
-  store(on)
-  on('model.complete', () => ({ value: { isAnswered: true, text: 'Once.', usage: {} } }) as never)
-  on('turn.complete', (_$, e) => ({ text: e.answer }))
-  on('ui.render', () => ({ type: 'Box', children: [{ type: 'Text', children: ['✻ Cooked'] }, { type: 'Text', children: ['  TL;DR: Once.'] }] }) as never)
-  await $.turn.complete(done(long))
-  await settle()
-  const ui = await $.ui.mount({ plugin: 'tldr', surface: 'terminal', component: 'TurnDuration', props: { word: 'Cooked', durationMs: 30_000 } as never })
-  expect(JSON.stringify(await ui.drawn()).match(/TL;DR/g)).toHaveLength(1)
 })
 
 test("the turn completes without waiting for Haiku; the TL;DR follows when it answers", async ($, on) => {

@@ -80,7 +80,7 @@
     "summaryStyle": {
       "type": "string",
       "title": "Summary style",
-      "description": "haiku: a one-line summary written by Claude Haiku (a tiny API call), or the tldr mod's line when it's on. first-sentence: the answer's first sentence, free",
+      "description": "haiku: a one-line summary written by Claude Haiku (a tiny API call), or turn-receipt's TL;DR when it's on. first-sentence: the answer's first sentence, free",
       "options": [
         "haiku",
         "first-sentence"

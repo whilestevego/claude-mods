@@ -1,1 +1,10 @@
-{ "name": "turn-receipt", "version": "0.2.0", "description": "A receipt row above the prompt after each turn: time, tools, files edited, cost", "author": { "name": "Steve Godin", "url": "https://github.com/whilestevego" }, "types": "./types/index.d.ts" }
+{
+  "name": "turn-receipt",
+  "version": "0.3.0",
+  "description": "A receipt on each turn's closing line (time, tools, files edited, tokens, cost) and a one-line TL;DR under long replies, written by Claude Haiku",
+  "author": { "name": "Steve Godin", "url": "https://github.com/whilestevego" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "minChars": { "type": "number", "title": "TL;DR: long reply (characters)", "description": "Replies shorter than this get no TL;DR", "default": 600 }
+  }
+}

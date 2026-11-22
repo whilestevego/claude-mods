@@ -8,14 +8,13 @@ Claude Code mods: what's built, and ideas for more. ✅ = built.
   - Hover the bar to swap it for the legend (what's using the space).
   - `/context-bar` hides or shows it.
 - ✅ **rate-limits**: 5-hour and weekly usage meters under the context bar.
-  - Yellow at 70%, red at 90%, and a warning once a limit passes 90%.
-- ✅ **session-info**: the session's name, ID and git worktree in the footer, as `📝 <name> 🏷️ <id> 🌳 <worktree>`.
+  - Yellow at 70%, red at 90%.
+- ✅ **session-info**: the session's name, ID, git worktree and model in the footer, as `📝 <name> [ref] 🏷️ <id> 🌳 <worktree> 🧠 <model>`.
   - Blue and underlined on hover, with a pointing-hand cursor (Ghostty, Kitty, foot).
   - Click copies what was clicked; ctrl-click copies `claude --resume <id>`.
 - ✅ **turn-receipt**: a receipt on each turn's "Baked for…" line.
   - Tools run, files edited, tokens in and out, and the turn's cost.
-- ✅ **tldr**: a one-sentence Haiku summary under long replies.
-  - The say mod speaks this same line, so a turn has one summary.
+  - A one-sentence Haiku TL;DR under long replies. notify uses this same line, so a turn has one summary.
 - ✅ **say**: Claude speaks through [murmur](https://github.com/whilestevego/murmur), only when you're away.
   - Turn summaries, needs-you alerts, background tasks done, progress check-ins, rate-limit warnings.
   - `/say` plays this session's voice; `/say pick` picks another (`/say pick random` for a surprise); `/say read`, `/say tldr`, `/say hush`.

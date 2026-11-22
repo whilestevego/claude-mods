@@ -2,18 +2,12 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Window } from '../types'
-import { color, label, meter, resets, toWarn } from './gauge'
+import { color, label, meter, resets } from './gauge'
 
 const windows = atom({ plugin: 'rate-limits', key: 'windows' } as const, [])
-const warned = atom({ plugin: 'rate-limits', key: 'warned' } as const, [])
 
 async function store($: EngineInterface, next: readonly Window[]) {
   await update($, windows, () => next.map(w => ({ ...w })))
-  const fresh = toWarn(next, await read($, warned))
-  if (fresh.length === 0) return
-  await update($, warned, all => [...all, ...fresh].slice(-20))
-  for (const w of next.filter(w => fresh.includes(`${w.kind}@${w.resetsAt ?? ''}`)))
-    $.ui.toast(`⚠️ ${label(w.kind)} rate limit at ${w.percentUsed}%${w.resetsAt ? `, resets ${resets(w.resetsAt, Date.now())}` : ''}`)
 }
 
 export const register: Register = on => {

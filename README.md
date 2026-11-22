@@ -5,8 +5,8 @@ one mod. Turn on the ones you want (see [Setup](#setup)) and change their settin
 `/config`, under the mod's name.
 
 Each mod works on its own, and a few work better together. **notify** tells you when
-something happens; with **say** it can tell you out loud, with **tldr** its turn summaries
-reuse tldr's line instead of writing their own, and with **ghostty** or **rex** it stays quiet
+something happens; with **say** it can tell you out loud, with **turn-receipt** its turn
+summaries reuse the TL;DR instead of writing their own, and with **ghostty** or **rex** it stays quiet
 while you're looking at the session. In Ghostty and Rex, clicking its notification brings you
 back to the session's tab.
 
@@ -22,9 +22,8 @@ Shows how full Claude's context window is, as a colored bar above the prompt.
 ### rate-limits
 
 Shows how much of your 5-hour and weekly usage limits you've used, as two small meters
-under the context bar. They turn yellow at 70% and red at 90%, and you get a warning
-inside Claude once a limit passes 90%. (notify also warns, as a desktop notification or out
-loud, at a threshold you set.)
+under the context bar. They turn yellow at 70% and red at 90%. notify warns you when you're
+away, as a desktop notification or out loud, at a threshold you set.
 
 - Nothing to do: it appears on its own when you're on a subscription plan.
 
@@ -42,15 +41,11 @@ can have the same name, but the ref is different for each. Use the full name wit
 ### turn-receipt
 
 Adds a receipt to the line that closes each turn ("✻ Baked for 42s"): how many tools ran,
-which files were edited, the tokens used and what the turn cost.
+which files were edited, the tokens used and what the turn cost. Under a longer reply it
+adds a one-sentence TL;DR, written by Claude Haiku.
 
 - Nothing to do: it appears after every turn.
-
-### tldr
-
-Adds a one-sentence summary under Claude's longer replies, written by Claude Haiku.
-
-- Nothing to do. **TL;DR: long reply** in `/config` sets how long a reply must be
+- **TL;DR: long reply** in `/config` sets how long a reply must be to get a TL;DR
   (600 characters by default).
 - With notify on, the same line is its summary when a long turn finishes, at no extra cost.
 
@@ -82,8 +77,7 @@ Without it, nothing can tell whether you're looking, so it always tells you.
 
 | Command | What it does |
 |---|---|
-| `/notify test` | Sends a desktop notification right away. macOS can't tell a mod whether your terminal may show notifications, so this is how to check. The first time notify starts, it reminds you once. |
-| `/notify haiku` | The same, with a fresh haiku from Claude Haiku as its text. |
+| `/notify haiku` | Sends a desktop notification right away, with a fresh haiku from Claude Haiku as its text. macOS can't tell a mod whether your terminal may show notifications, so this is how to check. The first time notify starts, it reminds you once. |
 | `/notify settings` | Opens the switch in System Settings: the entry of herald's `claude` source in Ghostty and Rex, the Notifications list elsewhere. |
 
 ### say
@@ -175,7 +169,7 @@ Install the mods you want, one line each, at the prompt of a Claude Code session
 ```
 
 Answer `y` to add the marketplace, then pick a scope. The mods are `context-bar`,
-`rate-limits`, `session-info`, `turn-receipt`, `tldr`, `notify`, `say`, `ghostty` and `rex`.
+`rate-limits`, `session-info`, `turn-receipt`, `notify`, `say`, `ghostty` and `rex`.
 
 ### From a clone, while working on them
 
@@ -207,7 +201,7 @@ export CLAUDE_CODE_PLUGIN_DIRS
 
 A Claude session that no shell starts, such as one an editor starts, then loads no mods.
 
-To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/tldr`.
+To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/turn-receipt`.
 
 ## Requirements
 
@@ -219,7 +213,7 @@ To try one mod for a single session: `claude --plugin-dir /path/to/claude-mods/t
   Apple Silicon Macs.
 - **notify**'s desktop notifications need notifications allowed in System Settings →
   Notifications: for Claude Code (herald's `claude` source) in Ghostty and Rex, which needs
-  herald installed, or for your terminal elsewhere. `/notify test` checks;
+  herald installed, or for your terminal elsewhere. `/notify haiku` checks;
   `/notify settings` opens the page.
 - **session-info**'s pointing-hand cursor works in Ghostty, Kitty and foot.
 
