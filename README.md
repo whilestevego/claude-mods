@@ -159,6 +159,12 @@ reports its status to Rex (tab dots, Dock badge, sounds). All its settings start
 - **Focus for notify:** tells notify whether you're looking at the session: Rex is in front,
   on this session, with this pane focused. With several Rex windows open, Rex only names the
   session of the window you used last, so the answer can be wrong.
+- **Restore:** each session saves where it runs (Rex session, tab, pane and folder) in
+  `~/.claude/rex-sessions` after every turn. After a restart or a Rex crash, run `/rex-restore` in
+  any Claude session in Rex. It resumes each saved conversation that no Claude runs now: in its
+  old pane when that pane sits at a shell prompt, else in an idle pane of a tab with the same
+  name, else in a new tab, or a new Rex session when its session is gone. A session you leave
+  (`/exit`, `/clear`, a closed tab) is not brought back. Records older than 14 days are skipped.
 
 In other terminals the rex mod does nothing.
 
